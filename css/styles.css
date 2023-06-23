@@ -87,6 +87,25 @@ li:hover {
   text-transform: uppercase;
 }
 
+.we-accept{
+  height: 10vh;
+}
+.slideshow-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 75vh;
+}
+.slideshow-element {
+  position: absolute;
+  transform: translate(-50%, -50%) scale(0);
+  transition: transform 1s;
+}
+.current {
+  transform: translate(-50%, -50%) scale(1);
+  transition: transform 1s;
+}
+
 /* ID */
 
 /* media-queries */
@@ -135,22 +154,4 @@ li:hover {
   .form {
     max-width: 50%;
   }
-}
-.we-accept{
-  height: 10vh;
-}
-.slideshow-container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 75vh;
-}
-.slideshow-element {
-  position: absolute;
-  transform: translate(-50%, -50%) scale(0);
-  transition: transform 1s;
-}
-.slideshow-element.current {
-  transform: translate(-50%, -50%) scale(1);
-  transition: transform 1s;
 }
