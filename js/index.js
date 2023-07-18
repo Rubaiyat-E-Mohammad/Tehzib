@@ -1,20 +1,54 @@
 //showing contact as popup
-document.querySelector('.number').addEventListener('click', number)
+$('.number').click(function number(){
+  alert('01689925465')
+})
 
 //functions
-function number(){
-    alert('01689925465')
-}
-document.querySelector('#offers').addEventListener('click', function(){
+$('#offers').click(function(){
     let value = confirm('Want to see offers')
     if(value){
         alert('here is your offers')
     }
     else{
-        alert('fuckoff')
+        alert('okay')
     }
 })
 
+//showing catagories
+$("ul .mens").mouseenter(function () { 
+  $(".men").slideDown()
+  $(".men").animate({transition: "0.5s",borderRadius: "10px",margin: "7px"})
+})
+$("ul .mens").mouseleave(function () { 
+  $(".men").hide()
+})
+
+$("ul .womens").mouseenter(function () { 
+  $(".women").slideDown()
+  $(".women").animate({transition: "0.5s",borderRadius: "10px",margin: "7px"})
+})
+$("ul .womens").mouseleave(function () { 
+  $(".women").hide()
+})
+
+$("ul .kids").mouseenter(function () { 
+  $(".kid").slideDown()
+  $(".kid").animate({transition: "0.5s",borderRadius: "10px",margin: "7px"})
+})
+$("ul .kids").mouseleave(function () { 
+  $(".kid").hide()
+})
+
+$("ul .accss").mouseenter(function () { 
+  $(".accs").slideDown()
+  $(".accs").animate({transition: "0.5s",borderRadius: "10px",margin: "7px"})
+})
+$("ul .accss").mouseleave(function () { 
+  $(".accs").hide()
+})
+
+
+//bd flag
 var c = document.querySelector('#mycan')
 var cx = c.getContext('2d')
 cx.fillStyle = "green"
@@ -26,7 +60,9 @@ cx.arc(x,y,10,0,2*Math.PI, false)
 cx.fillStyle = "red"
 cx.fill()
 
-const slideshowElements = document.querySelectorAll(".slideshow-element");
+
+//payment system slide-show
+const slideshowElements = $(".slideshow-element");
 console.log(slideshowElements)
 
 let countElements = 1;

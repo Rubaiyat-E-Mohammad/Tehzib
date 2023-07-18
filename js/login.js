@@ -1,8 +1,8 @@
 //confirmation before submission
-document.querySelector('#login').addEventListener("click", confirm)
-function confirm(){
+$('#login').click(function confirm(){
     alert('proceed?')
-}
+})
+
 
 //submitted value
 var form = document.querySelector('form');
