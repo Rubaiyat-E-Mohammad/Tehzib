@@ -1,0 +1,774 @@
+// =============================================================================
+// TEHZIB — Unified Storefront + Enterprise ERP / EMS data model
+// PostgreSQL + Prisma. All money values are stored as integer BDT (৳).
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// -----------------------------------------------------------------------------
+// ENUMS
+// -----------------------------------------------------------------------------
+
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum VariantOptionType {
+  COLOUR
+  SIZE
+  DESIGN
+  STANDARD
+}
+
+enum StockMovementType {
+  PO_RECEIPT // GRN received -> +available
+  GRN_DAMAGED // GRN damaged on arrival -> +damaged
+  ORDER_RESERVED // order placed/confirmed -> -available +reserved
+  ORDER_RELEASED // cancelled/failed -> +available -reserved
+  ORDER_DELIVERED // delivered -> -reserved +sold
+  RETURN_RESTOCKED // return restocked -> +available +returned (-sold)
+  RETURN_DEFECTIVE // defective return -> +damaged (-sold)
+  MANUAL_ADJUSTMENT // manual stock adjustment
+  OPENING_BALANCE // seeded opening stock
+}
+
+enum OrderChannel {
+  STOREFRONT
+  SHOWROOM_POS
+  FACEBOOK
+  INSTAGRAM
+  WHATSAPP
+}
+
+enum PriceTier {
+  RETAIL
+  WHOLESALE
+}
+
+enum OrderStatus {
+  NEW
+  CONFIRMED
+  PACKED
+  DISPATCHED
+  DELIVERED
+  DELIVERY_FAILED
+  CANCELLED
+  RETURNED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  PENDING // unpaid / COD due
+  PAID // prepaid (bKash/Nagad/Card/Bank) or COD settled
+  COLLECTED // COD collected by courier, awaiting settlement
+  REFUNDED
+}
+
+enum DeliveryMethod {
+  INSIDE_DHAKA
+  OUTSIDE_DHAKA
+  EXPRESS
+  PICKUP
+}
+
+enum Courier {
+  STEADFAST
+  PATHAO
+  REDX
+  PAPERFLY
+  SELF
+}
+
+enum ReturnType {
+  RETURN
+  EXCHANGE
+  REFUND
+}
+
+enum ReturnStatus {
+  REQUESTED
+  RECEIVED
+  RESTOCKED
+  DEFECTIVE
+  EXCHANGE_DISPATCHED
+  REFUNDED
+  REJECTED
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum CustomerTier {
+  VIP
+  REPEAT
+  NEW
+  INACTIVE
+}
+
+enum POStatus {
+  DRAFT // supplier product entered, awaiting shipment
+  ORDERED
+  IN_TRANSIT
+  PARTIAL
+  RECEIVED
+  CANCELLED
+}
+
+enum AccountType {
+  BANK
+  CASH
+  BKASH
+  NAGAD
+}
+
+enum SupplierPaymentType {
+  ADVANCE
+  DUE_SETTLEMENT
+}
+
+enum StaffStatus {
+  ACTIVE
+  ON_LEAVE
+  INACTIVE
+}
+
+enum LookupKind {
+  EXPENSE_CATEGORY
+  SUPPLIER_CATEGORY
+  PAYMENT_TERM
+}
+
+enum FooterLinkType {
+  INFO // opens popup policy modal
+  CATEGORY // navigates to catalog category
+  LINK // external / internal URL
+}
+
+// -----------------------------------------------------------------------------
+// CATALOGUE
+// -----------------------------------------------------------------------------
+
+model Category {
+  id            String        @id @default(cuid())
+  name          String        @unique
+  slug          String        @unique
+  imageUrl      String?
+  enabled       Boolean       @default(true)
+  rolloutPhase  String?
+  sortOrder     Int           @default(0)
+  subcategories Subcategory[]
+  products      Product[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model Subcategory {
+  id         String    @id @default(cuid())
+  name       String
+  slug       String
+  sortOrder  Int       @default(0)
+  categoryId String
+  category   Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  products   Product[]
+
+  @@unique([categoryId, slug])
+}
+
+model Product {
+  id               String           @id @default(cuid())
+  sku              String           @unique
+  slug             String           @unique
+  title            String
+  categoryId       String
+  category         Category         @relation(fields: [categoryId], references: [id])
+  subcategoryId    String?
+  subcategory      Subcategory?     @relation(fields: [subcategoryId], references: [id], onDelete: SetNull)
+  supplierId       String?
+  supplier         Supplier?        @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  // Pricing (BDT)
+  costPrice        Int              @default(0) // purchase cost
+  landedCost       Int              @default(0)
+  wholesalePrice   Int              @default(0)
+  price            Int // retail / sale price
+  oldPrice         Int? // compare-at price
+  // Merchandising
+  status           ProductStatus    @default(DRAFT)
+  statusLabel      String           @default("Active")
+  isPublished      Boolean          @default(false)
+  isDeal           Boolean          @default(false)
+  isFeatured       Boolean          @default(false) // Trendsetters
+  isNew            Boolean          @default(false)
+  isJustForYou     Boolean          @default(false)
+  specialTab       String? // Curated Capsule tab
+  rating           Float            @default(4.9)
+  reviewsCount     Int              @default(0)
+  reorderThreshold Int              @default(5)
+  // Content
+  imageKey         String?
+  description      String           @default("")
+  specs            String           @default("")
+  videoUrl         String?
+  videoCaption     String?
+  seoKeywords      String?
+  seoDescription   String?
+  geoKeywords      String?
+  // Relations
+  images           ProductImage[]
+  variants         ProductVariant[]
+  movements        StockMovement[]
+  orderItems       OrderItem[]
+  reviews          Review[]
+  purchaseOrders   PurchaseOrder[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([categoryId])
+  @@index([isPublished, status])
+}
+
+model ProductImage {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  url       String
+  alt       String?
+  sortOrder Int     @default(0)
+}
+
+/// Single-source stock engine: every unit lives in exactly one bucket.
+model ProductVariant {
+  id         String            @id @default(cuid())
+  productId  String
+  product    Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sku        String            @unique
+  name       String // e.g. "M", "Blush Pink", "EU 37"
+  optionType VariantOptionType @default(STANDARD)
+  priceDelta Int               @default(0)
+  sortOrder  Int               @default(0)
+  available  Int               @default(0)
+  reserved   Int               @default(0)
+  sold       Int               @default(0)
+  returned   Int               @default(0)
+  damaged    Int               @default(0)
+  movements  StockMovement[]
+  orderItems OrderItem[]
+
+  @@index([productId])
+}
+
+model StockMovement {
+  id             String            @id @default(cuid())
+  createdAt      DateTime          @default(now())
+  type           StockMovementType
+  productId      String
+  product        Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variantId      String?
+  variant        ProductVariant?   @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  deltaAvailable Int               @default(0)
+  deltaReserved  Int               @default(0)
+  deltaSold      Int               @default(0)
+  deltaReturned  Int               @default(0)
+  deltaDamaged   Int               @default(0)
+  label          String // human readable e.g. "PO Receipt (+5 Available)"
+  note           String?
+  reference      String? // order number / PO number / return id
+  staffId        String?
+  staff          Staff?            @relation(fields: [staffId], references: [id], onDelete: SetNull)
+
+  @@index([productId, createdAt])
+  @@index([createdAt])
+}
+
+// -----------------------------------------------------------------------------
+// SUPPLIERS, PURCHASE ORDERS & GRN
+// -----------------------------------------------------------------------------
+
+model Supplier {
+  id             String            @id @default(cuid())
+  code           String            @unique // SUP-01
+  name           String
+  contact        String?
+  phone          String?
+  email          String?
+  category       String?
+  moq            Int               @default(1)
+  leadDays       Int               @default(3)
+  quotedRange    String?
+  terms          String?
+  address        String?
+  paidAmount     Int               @default(0)
+  payable        Int               @default(0)
+  advanceByStaff String?
+  dueByStaff     String?
+  advanceAccount String?
+  dueAccount     String?
+  defectClaims   String?
+  notes          String?
+  products       Product[]
+  purchaseOrders PurchaseOrder[]
+  payments       SupplierPayment[]
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+}
+
+model PurchaseOrder {
+  id                 String            @id @default(cuid())
+  number             String            @unique // PO-2027-100
+  date               DateTime          @default(now())
+  supplierId         String
+  supplier           Supplier          @relation(fields: [supplierId], references: [id])
+  productId          String
+  product            Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sku                String
+  moq                Int               @default(1)
+  orderedQty         Int
+  receivedQty        Int               @default(0)
+  damagedQty         Int               @default(0)
+  costPrice          Int
+  landedCost         Int
+  wholesalePrice     Int
+  retailPrice        Int
+  warehouse          String            @default("Uttara Sector 12 Hub")
+  status             POStatus          @default(DRAFT)
+  statusLabel        String            @default("PENDING_GRN")
+  advancePaid        Int               @default(0)
+  payableDue         Int               @default(0)
+  responsibleStaffId String?
+  responsibleStaff   Staff?            @relation(fields: [responsibleStaffId], references: [id], onDelete: SetNull)
+  paymentAccountId   String?
+  paymentAccount     Account?          @relation(fields: [paymentAccountId], references: [id], onDelete: SetNull)
+  expectedArrival    DateTime?
+  notes              String?
+  receipts           GoodsReceipt[]
+  payments           SupplierPayment[]
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+}
+
+model GoodsReceipt {
+  id          String        @id @default(cuid())
+  number      String        @unique // GRN-2027-001
+  poId        String
+  po          PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
+  receivedQty Int
+  damagedQty  Int           @default(0)
+  landedCost  Int
+  receivedAt  DateTime      @default(now())
+  staffId     String?
+  staff       Staff?        @relation(fields: [staffId], references: [id], onDelete: SetNull)
+  note        String?
+}
+
+model Preorder {
+  id              String    @id @default(cuid())
+  number          String    @unique
+  sku             String
+  productTitle    String
+  customerName    String
+  customerPhone   String
+  supplierName    String?
+  leadTime        String?
+  expectedArrival DateTime?
+  orderValue      Int
+  depositHeld     Int       @default(0)
+  status          String
+  createdAt       DateTime  @default(now())
+}
+
+model SupplierPayment {
+  id             String              @id @default(cuid())
+  number         String              @unique // PAY-501
+  date           DateTime            @default(now())
+  supplierId     String
+  supplier       Supplier            @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  poId           String?
+  po             PurchaseOrder?      @relation(fields: [poId], references: [id], onDelete: SetNull)
+  poNumber       String?
+  type           SupplierPaymentType
+  paymentType    String              @default("Advance Payment")
+  amount         Int
+  accountId      String?
+  account        Account?            @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  accountName    String?
+  staffId        String?
+  staff          Staff?              @relation(fields: [staffId], references: [id], onDelete: SetNull)
+  advanceByStaff String?
+  dueByStaff     String?
+  details        String?
+}
+
+// -----------------------------------------------------------------------------
+// CUSTOMERS, ORDERS, RETURNS, REVIEWS & LOYALTY
+// -----------------------------------------------------------------------------
+
+model Customer {
+  id              String               @id @default(cuid())
+  code            String               @unique // CUST-101
+  name            String
+  email           String?              @unique
+  phone           String               @unique
+  passwordHash    String?
+  gender          String?
+  dob             String?
+  address         String?
+  tier            CustomerTier         @default(NEW)
+  rating          Float                @default(5)
+  points          Int                  @default(0)
+  ordersCount     Int                  @default(0)
+  completedOrders Int                  @default(0)
+  spend           Int                  @default(0)
+  returnsCount    Int                  @default(0)
+  failedCount     Int                  @default(0)
+  notes           String?
+  consentSms      Boolean              @default(true)
+  consentWhatsapp Boolean              @default(true)
+  consentEmail    Boolean              @default(true)
+  referralCode    String?              @unique
+  referredById    String?
+  referredBy      Customer?            @relation("Referrals", fields: [referredById], references: [id], onDelete: SetNull)
+  referrals       Customer[]           @relation("Referrals")
+  orders          Order[]
+  reviews         Review[]
+  loyalty         LoyaltyTransaction[]
+  notifications   Notification[]
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+}
+
+model Order {
+  id                String         @id @default(cuid())
+  number            String         @unique // ORD-2027-901
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  customerId        String?
+  customer          Customer?      @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customerName      String
+  customerPhone     String
+  customerEmail     String?
+  customerAddress   String
+  city              String?
+  channel           OrderChannel   @default(STOREFRONT)
+  campaignSource    String?
+  tier              PriceTier      @default(RETAIL)
+  status            OrderStatus    @default(NEW)
+  // Delivery & courier
+  deliveryMethod    DeliveryMethod @default(INSIDE_DHAKA)
+  deliveryFee       Int            @default(0)
+  courier           Courier?
+  trackingNumber    String?
+  dispatchDate      DateTime?
+  deliveredAt       DateTime?
+  deliveryAttempts  Int            @default(0)
+  deliveryOutcome   String?
+  // Money
+  subtotal          Int
+  discount          Int            @default(0)
+  couponCode        String?
+  total             Int
+  totalCogs         Int            @default(0)
+  paymentMethod     String // "Cash on Delivery (COD)", "bKash", ...
+  paymentStatus     PaymentStatus  @default(PENDING)
+  codSettled        Boolean        @default(false)
+  codSettledAt      DateTime?
+  settlementAccount Account?       @relation(fields: [settlementAccountId], references: [id], onDelete: SetNull)
+  settlementAccountId String?
+  packagingCost     Int            @default(0)
+  courierActualCost Int            @default(0)
+  codFee            Int            @default(0)
+  pointsEarned      Int            @default(0)
+  notes             String?
+  createdByStaffId  String?
+  createdByStaff    Staff?         @relation(fields: [createdByStaffId], references: [id], onDelete: SetNull)
+  items             OrderItem[]
+  returns           ReturnRequest[]
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model OrderItem {
+  id          String          @id @default(cuid())
+  orderId     String
+  order       Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId   String?
+  product     Product?        @relation(fields: [productId], references: [id], onDelete: SetNull)
+  variantId   String?
+  variant     ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  sku         String
+  title       String
+  variantName String?
+  qty         Int
+  unitPrice   Int
+  unitCost    Int             @default(0)
+}
+
+model ReturnRequest {
+  id           String       @id @default(cuid())
+  number       String       @unique // RET-2027-01
+  orderId      String
+  order        Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  type         ReturnType   @default(RETURN)
+  status       ReturnStatus @default(REQUESTED)
+  items        String
+  reason       String?
+  actionNote   String?
+  refundAmount Int          @default(0)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+}
+
+model Review {
+  id           String       @id @default(cuid())
+  productId    String
+  product      Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  customerId   String?
+  customer     Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customerName String
+  rating       Int
+  comment      String
+  status       ReviewStatus @default(PENDING)
+  createdAt    DateTime     @default(now())
+}
+
+model LoyaltyTransaction {
+  id         String   @id @default(cuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  points     Int
+  reason     String
+  reference  String?
+  createdAt  DateTime @default(now())
+}
+
+model Notification {
+  id         String    @id @default(cuid())
+  customerId String? // null = broadcast to everyone
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  icon       String    @default("✦")
+  title      String
+  body       String
+  targetView String? // home | account | cart | catalog
+  readAt     DateTime?
+  createdAt  DateTime  @default(now())
+}
+
+model NewsletterSubscriber {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  createdAt DateTime @default(now())
+}
+
+// -----------------------------------------------------------------------------
+// PROMOTIONS & STOREFRONT CMS
+// -----------------------------------------------------------------------------
+
+model Coupon {
+  id                String    @id @default(cuid())
+  code              String    @unique
+  title             String?
+  description       String?
+  discountPct       Int
+  minOrder          Int       @default(0)
+  startDate         DateTime?
+  endDate           DateTime?
+  usageLimit        Int?
+  usedCount         Int       @default(0)
+  source            String?
+  attributedOrders  Int       @default(0)
+  attributedRevenue Int       @default(0)
+  active            Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+}
+
+model HeroSlide {
+  id                String   @id @default(cuid())
+  tag               String
+  title             String
+  subtitle          String
+  ctaText           String
+  targetCategory    String   @default("All")
+  secondaryText     String?
+  secondaryCategory String?
+  imageUrl          String
+  showcaseProductId String?
+  sortOrder         Int      @default(0)
+  active            Boolean  @default(true)
+  createdAt         DateTime @default(now())
+}
+
+model PromoBanner {
+  id             String  @id @default(cuid())
+  eyebrow        String
+  title          String
+  sub            String
+  targetCategory String
+  imageUrl       String
+  sortOrder      Int     @default(0)
+  active         Boolean @default(true)
+}
+
+/// Singleton row (id = "default") holding brand, homepage & footer CMS content.
+model StoreSettings {
+  id                    String   @id @default("default")
+  logoLightUrl          String
+  logoDarkUrl           String
+  topOfferText          String?
+  conciergePhone        String
+  secCategoriesTitle    String   @default("Top Categories")
+  secTrendTitle         String   @default("Trendsetters")
+  secNewTitle           String   @default("New Arrivals")
+  secJfyTitle           String   @default("Just For You")
+  secCapsuleTitle       String   @default("Curated Capsule")
+  newsletterTitle       String
+  newsletterSub         String
+  footerBio             String
+  footerAddress         String
+  footerEmail           String
+  footerPhone           String
+  footerCopyright       String
+  socialFacebook        String?
+  socialInstagram       String?
+  socialTiktok          String?
+  socialThreads         String?
+  insideDhakaFee        Int      @default(70)
+  outsideDhakaFee       Int      @default(130)
+  freeDeliveryThreshold Int?
+  updatedAt             DateTime @updatedAt
+}
+
+model FooterSection {
+  id        String       @id @default(cuid())
+  title     String
+  sortOrder Int          @default(0)
+  links     FooterLink[]
+}
+
+model FooterLink {
+  id             String         @id @default(cuid())
+  sectionId      String
+  section        FooterSection  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  label          String
+  type           FooterLinkType @default(INFO)
+  modalTitle     String?
+  message        String?
+  targetCategory String?
+  href           String?
+  sortOrder      Int            @default(0)
+}
+
+model SocialChannel {
+  id        String   @id @default(cuid())
+  platform  String // Facebook, Instagram, TikTok, WhatsApp
+  handle    String
+  syncOn    Boolean  @default(true)
+  lastSync  DateTime?
+  alertsOn  Boolean  @default(true)
+}
+
+// -----------------------------------------------------------------------------
+// FINANCE: ACCOUNTS, EXPENSES, LOOKUPS
+// -----------------------------------------------------------------------------
+
+model Account {
+  id               String            @id // acc_bank, acc_cash, acc_bkash, acc_nagad
+  name             String
+  type             AccountType
+  balance          Int               @default(0)
+  expenses         Expense[]
+  supplierPayments SupplierPayment[]
+  purchaseOrders   PurchaseOrder[]
+  settledOrders    Order[]
+}
+
+model Expense {
+  id        String   @id @default(cuid())
+  number    String   @unique // EXP-301
+  date      DateTime @default(now())
+  title     String
+  details   String?
+  category  String
+  amount    Int
+  accountId String?
+  account   Account? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  staffId   String?
+  staff     Staff?   @relation(fields: [staffId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+}
+
+model Lookup {
+  id        String     @id @default(cuid())
+  kind      LookupKind
+  value     String
+  sortOrder Int        @default(0)
+
+  @@unique([kind, value])
+}
+
+// -----------------------------------------------------------------------------
+// WORKING TEAM (HRM + RBAC)
+// -----------------------------------------------------------------------------
+
+model StaffRole {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  permissions String[] // module keys, see src/lib/rbac.ts
+  isSystem    Boolean  @default(false)
+  staff       Staff[]
+}
+
+model Staff {
+  id               String            @id @default(cuid())
+  code             String            @unique // STF-101
+  name             String
+  email            String            @unique
+  loginId          String?           @unique // optional alias e.g. "tehzib-admin"
+  phone            String?
+  passwordHash     String
+  roleId           String
+  role             StaffRole         @relation(fields: [roleId], references: [id])
+  dept             String?
+  status           StaffStatus       @default(ACTIVE)
+  permissions      String[] // granular module access (overrides role defaults)
+  avatar           String?
+  lastLoginAt      DateTime?
+  movements        StockMovement[]
+  purchaseOrders   PurchaseOrder[]
+  receipts         GoodsReceipt[]
+  supplierPayments SupplierPayment[]
+  expenses         Expense[]
+  ordersCreated    Order[]
+  auditLogs        AuditLog[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  staffId   String?
+  staff     Staff?   @relation(fields: [staffId], references: [id], onDelete: SetNull)
+  module    String
+  action    String
+  message   String
+}
+
+/// ERP alert feed (order confirmations, low stock, COD settlements...)
+model AdminNotification {
+  id        String   @id @default(cuid())
+  type      String
+  message   String
+  createdAt DateTime @default(now())
+  readAt    DateTime?
+}
