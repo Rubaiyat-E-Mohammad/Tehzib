@@ -1008,6 +1008,9 @@ const IMG = {
           ];
 
       syncActiveCustomerToRegistry();
+      if (state.profile.email && !state.profile.avatar) {
+        syncGoogleAvatarIfAvailable(state.profile.email);
+      }
 
       if (!options.skipServerCookie) {
         fetch("/api/auth/customer", {
@@ -2282,12 +2285,117 @@ const IMG = {
       return `<button type="button" class="verify-action-pill" data-profile-verify="email">Verify Now</button>`;
     }
 
+    const __avatarSyncAttempted = new Set();
+    function syncGoogleAvatarIfAvailable(email) {
+      if (!email || typeof email !== "string" || !email.includes("@")) return;
+      const cleanEmail = email.trim().toLowerCase();
+      if (__avatarSyncAttempted.has(cleanEmail)) return;
+      __avatarSyncAttempted.add(cleanEmail);
+
+      if (state.profile.avatar && state.profile.avatar.startsWith("data:image")) return;
+
+      const targetUrl = `https://unavatar.io/google/${encodeURIComponent(cleanEmail)}`;
+      const probe = new Image();
+      probe.crossOrigin = "anonymous";
+      probe.onload = () => {
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = probe.naturalWidth || 150;
+          canvas.height = probe.naturalHeight || 150;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(probe, 0, 0);
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+          if (dataUrl && dataUrl.length > 200) {
+            state.profile.avatar = dataUrl;
+            if (state.currentCustomerId) {
+              const cust = state.registeredCustomers.find(c => c.id === state.currentCustomerId);
+              if (cust) cust.avatar = dataUrl;
+            }
+            saveDynamicDatabase(`Fetched Google profile photo for ${cleanEmail}`);
+            renderHeaderDropdowns();
+            renderAccountAndWishlist();
+          }
+        } catch (e) {
+          state.profile.avatar = targetUrl;
+          if (state.currentCustomerId) {
+            const cust = state.registeredCustomers.find(c => c.id === state.currentCustomerId);
+            if (cust) cust.avatar = targetUrl;
+          }
+          renderHeaderDropdowns();
+          renderAccountAndWishlist();
+        }
+      };
+      probe.onerror = () => {
+        const fallback = new Image();
+        fallback.crossOrigin = "anonymous";
+        fallback.onload = () => {
+          try {
+            const canvas = document.createElement("canvas");
+            canvas.width = fallback.naturalWidth || 150;
+            canvas.height = fallback.naturalHeight || 150;
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(fallback, 0, 0);
+            const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+            if (dataUrl && dataUrl.length > 200) {
+              state.profile.avatar = dataUrl;
+              if (state.currentCustomerId) {
+                const cust = state.registeredCustomers.find(c => c.id === state.currentCustomerId);
+                if (cust) cust.avatar = dataUrl;
+              }
+              saveDynamicDatabase(`Fetched profile photo for ${cleanEmail}`);
+              renderHeaderDropdowns();
+              renderAccountAndWishlist();
+            }
+          } catch (err) {}
+        };
+        fallback.src = `https://unavatar.io/${encodeURIComponent(cleanEmail)}?fallback=false`;
+      };
+      probe.src = targetUrl;
+    }
+
     function resolveCustomerAvatarUrl() {
       if (!state.isLoggedIn) return "";
       if (state.profile.avatar) return state.profile.avatar;
       const email = String(state.profile.email || "").trim().toLowerCase();
       if (email && email.includes("@")) {
-        return `https://unavatar.io/${encodeURIComponent(email)}?fallback=false`;
+        syncGoogleAvatarIfAvailable(email);
+      }
+      return "";
+    }
+
+    function formatDobForDisplay(raw) {
+      if (!raw || raw === "Not Specified") return "Not Specified";
+      const str = String(raw).trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+        const [y, m, d] = str.split("-");
+        const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+        const monthName = months[parseInt(m, 10) - 1] || m;
+        return `${parseInt(d, 10)} ${monthName}, ${y}`;
+      }
+      return str;
+    }
+
+    function parseDobToIso(raw) {
+      if (!raw || raw === "Not Specified") return "";
+      const str = String(raw).trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+      const match = str.match(/^(\d{1,2})\s+([A-Za-z]+),?\s+(\d{4})$/);
+      if (match) {
+        const d = match[1].padStart(2, "0");
+        const monthStr = match[2].toLowerCase();
+        const months = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+        const monthIdx = months.findIndex(m => m.startsWith(monthStr.slice(0, 3)));
+        if (monthIdx !== -1) {
+          const m = String(monthIdx + 1).padStart(2, "0");
+          return `${match[3]}-${m}-${d}`;
+        }
+      }
+      const parsed = new Date(str);
+      if (!Number.isNaN(parsed.getTime())) {
+        const y = parsed.getFullYear();
+        const m = String(parsed.getMonth() + 1).padStart(2, "0");
+        const d = String(parsed.getDate()).padStart(2, "0");
+        return `${y}-${m}-${d}`;
       }
       return "";
     }
@@ -2306,7 +2414,7 @@ const IMG = {
       if (avatarEl) {
         const safeInitials = initials || "TH";
         if (avatarUrl) {
-          avatarEl.innerHTML = `<span class="avatar-initials-text">${safeInitials}</span><img class="profile-avatar-img" src="${escapeHtmlText(avatarUrl)}" alt="${escapeHtmlText(displayName)}" style="display:none;" onload="this.style.display='block'; if(this.previousElementSibling) this.previousElementSibling.style.display='none';" onerror="this.style.display='none'; if(this.previousElementSibling) this.previousElementSibling.style.display='';" /><span class="avatar-edit-overlay">Photo</span>`;
+          avatarEl.innerHTML = `<span class="avatar-initials-text" style="display:none;">${safeInitials}</span><img class="profile-avatar-img" src="${escapeHtmlText(avatarUrl)}" alt="${escapeHtmlText(displayName)}" style="display:block;" onerror="this.style.display='none'; if(this.previousElementSibling) this.previousElementSibling.style.display='';" /><span class="avatar-edit-overlay">Photo</span>`;
         } else {
           avatarEl.innerHTML = `<span class="avatar-initials-text">${safeInitials}</span><span class="avatar-edit-overlay">Photo</span>`;
         }
@@ -2328,7 +2436,7 @@ const IMG = {
       const valAddr = document.getElementById("valAddress");
       if (valAddr) valAddr.textContent = state.profile.address || "—";
       document.getElementById("valGender").textContent = state.profile.gender || "Not Specified";
-      document.getElementById("valDob").textContent = state.profile.dob || "Not Specified";
+      document.getElementById("valDob").textContent = formatDobForDisplay(state.profile.dob);
       const emailBadge = document.getElementById("accountEmailVerifyBadge");
       if (emailBadge) emailBadge.innerHTML = state.isLoggedIn ? buildVerifyBadgeHtml("email") : "";
       const phoneBadge = document.getElementById("accountPhoneVerifyBadge");
@@ -2447,12 +2555,10 @@ const IMG = {
       const headerAvatarUrl = resolveCustomerAvatarUrl();
       if (headerAvatarImg && headerDefaultSvg) {
         if (state.isLoggedIn && headerAvatarUrl) {
+          headerAvatarImg.style.display = "block";
+          headerDefaultSvg.style.display = "none";
           if (headerAvatarImg.getAttribute("data-src") !== headerAvatarUrl) {
             headerAvatarImg.setAttribute("data-src", headerAvatarUrl);
-            headerAvatarImg.onload = () => {
-              headerAvatarImg.style.display = "block";
-              headerDefaultSvg.style.display = "none";
-            };
             headerAvatarImg.onerror = () => {
               headerAvatarImg.style.display = "none";
               headerDefaultSvg.style.display = "";
@@ -10147,18 +10253,23 @@ const IMG = {
 
     function ensureProfileControlsUpgraded() {
       const genderEl = document.getElementById("inputGender");
-      if (genderEl && genderEl.tagName !== "SELECT") {
-        const selectEl = document.createElement("select");
-        selectEl.className = "info-edit-input";
-        selectEl.id = "inputGender";
-        selectEl.style.display = genderEl.style.display || "none";
-        selectEl.innerHTML = `
-          <option value="">Select Gender</option>
-          <option value="Female">Female</option>
-          <option value="Male">Male</option>
-          <option value="Not to say">Not to say</option>
-        `;
-        genderEl.replaceWith(selectEl);
+      if (genderEl) {
+        if (genderEl.tagName !== "SELECT") {
+          const selectEl = document.createElement("select");
+          selectEl.className = "info-edit-input";
+          selectEl.id = "inputGender";
+          selectEl.style.display = genderEl.style.display || "none";
+          selectEl.style.cursor = "pointer";
+          selectEl.innerHTML = `
+            <option value="">Select Gender</option>
+            <option value="Female">Female</option>
+            <option value="Male">Male</option>
+            <option value="Not to say">Not to say</option>
+          `;
+          genderEl.replaceWith(selectEl);
+        } else {
+          genderEl.style.cursor = "pointer";
+        }
       }
       const dobEl = document.getElementById("inputDob");
       if (dobEl) {
@@ -10167,6 +10278,7 @@ const IMG = {
           dobEl.removeAttribute("placeholder");
         }
         dobEl.max = new Date().toISOString().slice(0, 10);
+        dobEl.style.cursor = "pointer";
         if (!dobEl.__pickerBound) {
           dobEl.__pickerBound = true;
           dobEl.addEventListener("click", () => {
@@ -10192,17 +10304,7 @@ const IMG = {
         const addrIn = document.getElementById("inputAddress");
         if (addrIn) addrIn.value = state.profile.address || "";
         document.getElementById("inputGender").value = ["Female", "Male", "Not to say"].includes(state.profile.gender) ? state.profile.gender : "";
-        const rawDob = state.profile.dob && state.profile.dob !== "Not Specified" ? String(state.profile.dob).trim() : "";
-        let isoDob = "";
-        if (/^\d{4}-\d{2}-\d{2}$/.test(rawDob)) {
-          isoDob = rawDob;
-        } else if (rawDob) {
-          const parsedDate = new Date(rawDob);
-          if (!Number.isNaN(parsedDate.getTime())) {
-            isoDob = parsedDate.toISOString().slice(0, 10);
-          }
-        }
-        document.getElementById("inputDob").value = isoDob;
+        document.getElementById("inputDob").value = parseDobToIso(state.profile.dob);
         fields.forEach(f => {
           const valEl = document.getElementById("val" + f);
           const inEl = document.getElementById("input" + f);
@@ -10229,10 +10331,10 @@ const IMG = {
           }
         }
         let parsedPh = null;
-        if (newPhoneRaw) {
+        if (newPhoneRaw && newPhoneRaw !== "+88") {
           parsedPh = parseBdPhone(newPhoneRaw);
           if (!parsedPh) {
-            showToast("Please enter a valid Bangladesh mobile number (e.g. 017XXXXXXXX)");
+            showToast("Please enter a valid Bangladesh mobile number (e.g. +880 17XX-XXXXXX)");
             return;
           }
           const owner = findCustomerByIdentifier(parsedPh.normalized);
@@ -10241,22 +10343,24 @@ const IMG = {
             return;
           }
         }
-        if (!newEmail && !parsedPh) {
+        if (!newEmail && !parsedPh && !state.profile.phone) {
           showToast("At least an Email Address or Bangladesh mobile number is required");
           return;
         }
 
-        if (newEmail !== (state.profile.email || "").toLowerCase()) {
+        if (newEmail && newEmail !== (state.profile.email || "").toLowerCase()) {
           state.profile.emailVerified = false;
         }
-        if ((parsedPh ? parsedPh.normalized : "") !== (state.profile.phoneNormalized || "")) {
+        if (parsedPh && parsedPh.normalized !== (state.profile.phoneNormalized || "")) {
           state.profile.phoneVerified = false;
         }
 
         state.profile.name = newName || state.profile.name;
-        state.profile.email = newEmail;
-        state.profile.phone = parsedPh ? parsedPh.formatted : "";
-        state.profile.phoneNormalized = parsedPh ? parsedPh.normalized : "";
+        if (newEmail) state.profile.email = newEmail;
+        if (parsedPh) {
+          state.profile.phone = parsedPh.formatted;
+          state.profile.phoneNormalized = parsedPh.normalized;
+        }
         state.profile.address = newAddr;
         state.profile.gender = newGender || "Not Specified";
         state.profile.dob = newDob || "Not Specified";
