@@ -3283,12 +3283,12 @@ const SEED_DATA = {
       "100% Advance Paid"
     ],
     "staffRoles": [
-      "Founder & Store Owner (Full Access)",
       "Finance & Accounts Controller",
-      "Procurement & Supplier Manager",
+      "Founder & Store Owner (Full Access)",
       "Inventory & Warehouse Lead",
+      "Marketing, Merchandising & CMS",
       "Order Fulfillment & Courier Ops",
-      "Marketing, Merchandising & CMS"
+      "Procurement & Supplier Manager"
     ],
     "staffMembers": [
       {
@@ -3298,6 +3298,8 @@ const SEED_DATA = {
         "email": "admin@tehzib.com",
         "role": "Founder & Store Owner (Full Access)",
         "dept": "Executive & Strategy",
+        "shift": "Full-Time Executive (Uttara HQ)",
+        "avatar": "TA",
         "status": "Active",
         "accesses": [
           "Dashboard & BI",
@@ -3317,11 +3319,14 @@ const SEED_DATA = {
         "phone": "+880 1819-223311",
         "email": "finance@tehzib.com",
         "role": "Finance & Accounts Controller",
-        "dept": "Finance & Accounts",
+        "dept": "Finance, Accounts & COD Settlement",
+        "shift": "09:30 AM – 06:30 PM",
+        "avatar": "FI",
         "status": "Active",
         "accesses": [
           "Dashboard & BI",
           "Suppliers & PO",
+          "Orders & POS",
           "Expenses & Payments",
           "Working Team Admin"
         ]
@@ -3332,9 +3337,12 @@ const SEED_DATA = {
         "phone": "+880 1912-445588",
         "email": "procurement@tehzib.com",
         "role": "Procurement & Supplier Manager",
-        "dept": "Sourcing & Procurement",
+        "dept": "Sourcing, Local MOQ & Direct Import",
+        "shift": "10:00 AM – 07:00 PM",
+        "avatar": "NS",
         "status": "Active",
         "accesses": [
+          "Dashboard & BI",
           "Product & Catalogue",
           "Inventory & Stock",
           "Suppliers & PO",
@@ -3343,29 +3351,54 @@ const SEED_DATA = {
       },
       {
         "id": "STF-104",
-        "name": "Tanvir Hossain",
-        "phone": "+880 1611-778844",
-        "email": "ops@tehzib.com",
-        "role": "Order Fulfillment & Courier Ops",
-        "dept": "Uttara Hub Dispatch",
-        "status": "Active",
-        "accesses": [
-          "Inventory & Stock",
-          "Orders & POS",
-          "Customer CRM"
-        ]
-      },
-      {
-        "id": "STF-105",
-        "name": "Lamia Chowdhury",
-        "phone": "+880 1715-664422",
-        "email": "cms@tehzib.com",
-        "role": "Marketing, Merchandising & CMS",
-        "dept": "Brand & Growth",
+        "name": "Rafiqul Hasan",
+        "phone": "+880 1718-554433",
+        "email": "inventory@tehzib.com",
+        "role": "Inventory & Warehouse Lead",
+        "dept": "Uttara Sector 12 Warehouse & GRN Hub",
+        "shift": "09:00 AM – 06:00 PM",
+        "avatar": "RH",
         "status": "Active",
         "accesses": [
           "Dashboard & BI",
           "Product & Catalogue",
+          "Inventory & Stock",
+          "Suppliers & PO",
+          "Orders & POS"
+        ]
+      },
+      {
+        "id": "STF-105",
+        "name": "Tanvir Hossain",
+        "phone": "+880 1611-778844",
+        "email": "ops@tehzib.com",
+        "role": "Order Fulfillment & Courier Ops",
+        "dept": "Uttara Hub Dispatch, Courier & POS",
+        "shift": "10:00 AM – 08:00 PM",
+        "avatar": "TH",
+        "status": "Active",
+        "accesses": [
+          "Dashboard & BI",
+          "Inventory & Stock",
+          "Orders & POS",
+          "Customer CRM",
+          "Expenses & Payments"
+        ]
+      },
+      {
+        "id": "STF-106",
+        "name": "Lamia Chowdhury",
+        "phone": "+880 1715-664422",
+        "email": "cms@tehzib.com",
+        "role": "Marketing, Merchandising & CMS",
+        "dept": "Brand, Promotions & Storefront CMS",
+        "shift": "10:30 AM – 07:30 PM",
+        "avatar": "LC",
+        "status": "Active",
+        "accesses": [
+          "Dashboard & BI",
+          "Product & Catalogue",
+          "Orders & POS",
           "Customer CRM",
           "Storefront CMS"
         ]

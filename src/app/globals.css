@@ -6068,7 +6068,7 @@
 
     #invoiceModal .erp-modal-dialog {
       width: 210mm !important;
-      max-width: 100% !important;
+      max-width: 210mm !important;
       max-height: none !important;
       overflow: visible !important;
       margin: 0 auto !important;
@@ -6437,11 +6437,21 @@ input[type="checkbox"]::before {
   right: 24px !important;
 }
 
-.site-header,
+.site-header {
+  top: 0 !important;
+}
+
 .erp-topbar,
 .erp-sidebar,
 .admin-sidebar {
   top: 0 !important;
+}
+
+@media (min-width: 769px) {
+  .header-main {
+    padding-left: 36px !important;
+    padding-right: 36px !important;
+  }
 }
 
 /* Ensure header dropdowns stack above category bar and never overlap hover menus */
@@ -7135,4 +7145,204 @@ input[type="checkbox"]::before {
   .modal-footer {
     padding: 14px 16px !important;
   }
+}
+
+/* ==========================================================================
+   ADMIN PROFILE DROPDOWN & RBAC SETTINGS STYLES (DUAL-THEME COMPLIANT)
+   ========================================================================== */
+.erp-admin-profile-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.erp-admin-profile-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 12px 5px 6px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-color);
+  background: var(--bg-elevated);
+  color: var(--text-main);
+  cursor: pointer;
+  transition: all 0.18s ease;
+  font-family: inherit;
+  font-size: 11px;
+}
+
+.erp-admin-profile-btn:hover {
+  background: var(--bg-card);
+  border-color: var(--accent-rose);
+}
+
+.erp-admin-profile-meta {
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+}
+
+.erp-admin-profile-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.erp-admin-profile-arrow {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  transition: transform 0.2s ease;
+}
+
+.erp-admin-profile-wrap.open .erp-admin-profile-arrow {
+  transform: rotate(180deg);
+}
+
+.erp-admin-profile-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 440px;
+  max-width: calc(100vw - 24px);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  z-index: 1060;
+  display: none;
+  text-align: left;
+  color: var(--text-main);
+  animation: fadeIn 0.18s ease;
+  overflow: hidden;
+}
+
+.erp-admin-profile-dropdown.open {
+  display: block;
+}
+
+.erp-dd-section {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.erp-dd-section:last-child {
+  border-bottom: none;
+}
+
+.erp-dd-header {
+  background: var(--bg-card);
+}
+
+.erp-dd-avatar-circle {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent-rose), var(--accent-rose-deep));
+  color: #FFFFFF;
+  font-weight: 800;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  flex-shrink: 0;
+}
+
+.erp-dd-subhead {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.erp-dd-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.erp-dd-kpi-card {
+  padding: 8px 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.erp-dd-kpi-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.erp-dd-kpi-val {
+  font-size: 13.5px;
+  font-weight: 800;
+}
+
+.erp-dd-kpi-sub {
+  font-size: 9.5px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.erp-dd-access-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.erp-dd-staff-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 190px;
+  overflow-y: auto;
+}
+
+.erp-dd-staff-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+
+.erp-dd-staff-card:hover {
+  background: var(--bg-elevated);
+  border-color: var(--accent-rose);
+}
+
+.erp-dd-staff-card.active-staff {
+  background: rgba(216, 153, 161, 0.12);
+  border-color: var(--accent-rose);
+}
+
+.erp-dd-footer-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  background: var(--bg-card);
+}
+
+.erp-nav-btn.rbac-locked {
+  opacity: 0.60 !important;
+  cursor: not-allowed !important;
+}
+
+.erp-nav-btn.rbac-locked:hover {
+  background: transparent !important;
+}
+
+.active-admin-row {
+  background: rgba(216, 153, 161, 0.08) !important;
 }

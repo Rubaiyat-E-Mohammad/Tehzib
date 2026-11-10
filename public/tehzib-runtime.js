@@ -1198,6 +1198,10 @@ const IMG = {
       return map;
     }
 
+    function escapeHtmlText(str) {
+      return String(str ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+    }
+
     function formatBDT(amount) {
       return "৳" + Number(amount || 0).toLocaleString("en-IN");
     }
@@ -1387,6 +1391,11 @@ const IMG = {
         switchWorkspaceMode("storefront");
       }
       closeHeaderDropdowns();
+      if (options.productId) {
+        state.activeProductId = options.productId;
+        state.pdpGalleryIdx = 0;
+        state.pdpQty = 1;
+      }
 
       const protectedScreens = ["account", "wishlist", "checkout", "notifications"];
       if (protectedScreens.includes(screenName) && !state.isLoggedIn) {
@@ -2694,11 +2703,223 @@ const IMG = {
     const ERP_STORAGE_KEY = "tehzib_unified_ems_v8";
     const AUTH_SESSION_KEY = "tehzib_admin_session_v4";
 
+    const ALL_ERP_MODULES = [
+      "Dashboard & BI",
+      "Product & Catalogue",
+      "Inventory & Stock",
+      "Suppliers & PO",
+      "Orders & POS",
+      "Customer CRM",
+      "Expenses & Payments",
+      "Storefront CMS",
+      "Working Team Admin"
+    ];
+
+    const MODULE_TO_VIEW_KEY = {
+      "Dashboard & BI": "dashboard",
+      "Product & Catalogue": "products",
+      "Inventory & Stock": "inventory",
+      "Suppliers & PO": "procurement",
+      "Orders & POS": "orders",
+      "Customer CRM": "crm",
+      "Expenses & Payments": "finance",
+      "Storefront CMS": "marketing_cms",
+      "Working Team Admin": "working_team"
+    };
+
+    const VIEW_KEY_TO_MODULE = {
+      "dashboard": "Dashboard & BI",
+      "products": "Product & Catalogue",
+      "inventory": "Inventory & Stock",
+      "procurement": "Suppliers & PO",
+      "orders": "Orders & POS",
+      "crm": "Customer CRM",
+      "finance": "Expenses & Payments",
+      "marketing_cms": "Storefront CMS",
+      "working_team": "Working Team Admin"
+    };
+
+    const ROLE_DEFAULT_ACCESS_MAP = {
+      "Founder & Store Owner (Full Access)": [
+        "Dashboard & BI",
+        "Product & Catalogue",
+        "Inventory & Stock",
+        "Suppliers & PO",
+        "Orders & POS",
+        "Customer CRM",
+        "Expenses & Payments",
+        "Storefront CMS",
+        "Working Team Admin"
+      ],
+      "Finance & Accounts Controller": [
+        "Dashboard & BI",
+        "Suppliers & PO",
+        "Orders & POS",
+        "Expenses & Payments",
+        "Working Team Admin"
+      ],
+      "Procurement & Supplier Manager": [
+        "Dashboard & BI",
+        "Product & Catalogue",
+        "Inventory & Stock",
+        "Suppliers & PO",
+        "Expenses & Payments"
+      ],
+      "Inventory & Warehouse Lead": [
+        "Dashboard & BI",
+        "Product & Catalogue",
+        "Inventory & Stock",
+        "Suppliers & PO",
+        "Orders & POS"
+      ],
+      "Order Fulfillment & Courier Ops": [
+        "Dashboard & BI",
+        "Inventory & Stock",
+        "Orders & POS",
+        "Customer CRM",
+        "Expenses & Payments"
+      ],
+      "Marketing, Merchandising & CMS": [
+        "Dashboard & BI",
+        "Product & Catalogue",
+        "Orders & POS",
+        "Customer CRM",
+        "Storefront CMS"
+      ]
+    };
+
+    const OPERATIONAL_ROLES = [
+      "Finance & Accounts Controller",
+      "Founder & Store Owner (Full Access)",
+      "Inventory & Warehouse Lead",
+      "Marketing, Merchandising & CMS",
+      "Order Fulfillment & Courier Ops",
+      "Procurement & Supplier Manager"
+    ];
+
+    const SEED_STAFF_MEMBERS = [
+      {
+        id: "STF-101",
+        name: "Tahmid Alvi",
+        email: "admin@tehzib.com",
+        phone: "+880 1711-889900",
+        role: "Founder & Store Owner (Full Access)",
+        dept: "Executive & Strategy",
+        shift: "Full-Time Executive (Uttara HQ)",
+        avatar: "TA",
+        status: "Active",
+        accesses: [
+          "Dashboard & BI",
+          "Product & Catalogue",
+          "Inventory & Stock",
+          "Suppliers & PO",
+          "Orders & POS",
+          "Customer CRM",
+          "Expenses & Payments",
+          "Storefront CMS",
+          "Working Team Admin"
+        ]
+      },
+      {
+        id: "STF-102",
+        name: "Farhan Islam",
+        email: "finance@tehzib.com",
+        phone: "+880 1819-223311",
+        role: "Finance & Accounts Controller",
+        dept: "Finance, Accounts & COD Settlement",
+        shift: "09:30 AM – 06:30 PM",
+        avatar: "FI",
+        status: "Active",
+        accesses: [
+          "Dashboard & BI",
+          "Suppliers & PO",
+          "Orders & POS",
+          "Expenses & Payments",
+          "Working Team Admin"
+        ]
+      },
+      {
+        id: "STF-103",
+        name: "Nadia Sultana",
+        email: "procurement@tehzib.com",
+        phone: "+880 1912-445588",
+        role: "Procurement & Supplier Manager",
+        dept: "Sourcing, Local MOQ & Direct Import",
+        shift: "10:00 AM – 07:00 PM",
+        avatar: "NS",
+        status: "Active",
+        accesses: [
+          "Dashboard & BI",
+          "Product & Catalogue",
+          "Inventory & Stock",
+          "Suppliers & PO",
+          "Expenses & Payments"
+        ]
+      },
+      {
+        id: "STF-104",
+        name: "Rafiqul Hasan",
+        email: "inventory@tehzib.com",
+        phone: "+880 1718-554433",
+        role: "Inventory & Warehouse Lead",
+        dept: "Uttara Sector 12 Warehouse & GRN Hub",
+        shift: "09:00 AM – 06:00 PM",
+        avatar: "RH",
+        status: "Active",
+        accesses: [
+          "Dashboard & BI",
+          "Product & Catalogue",
+          "Inventory & Stock",
+          "Suppliers & PO",
+          "Orders & POS"
+        ]
+      },
+      {
+        id: "STF-105",
+        name: "Tanvir Hossain",
+        email: "ops@tehzib.com",
+        phone: "+880 1611-778844",
+        role: "Order Fulfillment & Courier Ops",
+        dept: "Uttara Hub Dispatch, Courier & POS",
+        shift: "10:00 AM – 08:00 PM",
+        avatar: "TH",
+        status: "Active",
+        accesses: [
+          "Dashboard & BI",
+          "Inventory & Stock",
+          "Orders & POS",
+          "Customer CRM",
+          "Expenses & Payments"
+        ]
+      },
+      {
+        id: "STF-106",
+        name: "Lamia Chowdhury",
+        email: "cms@tehzib.com",
+        phone: "+880 1715-664422",
+        role: "Marketing, Merchandising & CMS",
+        dept: "Brand, Promotions & Storefront CMS",
+        shift: "10:30 AM – 07:30 PM",
+        avatar: "LC",
+        status: "Active",
+        accesses: [
+          "Dashboard & BI",
+          "Product & Catalogue",
+          "Orders & POS",
+          "Customer CRM",
+          "Storefront CMS"
+        ]
+      }
+    ];
+
     const AUTHORIZED_ADMINS = {
-      "admin@tehzib.com": { pass: "Tehzib@2027", name: "Founder & Store Owner", role: "Founder & Store Owner (Full Access)", avatar: "TA" },
-      "tehzib-admin": { pass: "Tehzib@2027", name: "Tehzib Master Admin", role: "Founder & Store Owner (Full Access)", avatar: "TA" },
-      "ops@tehzib.com": { pass: "Tehzib@2027", name: "Inventory & Courier Lead", role: "Order Fulfillment & Courier Ops", avatar: "OP" },
-      "finance@tehzib.com": { pass: "Tehzib@2027", name: "Finance & COD Controller", role: "Finance & COD Reconciliation", avatar: "FN" }
+      "admin@tehzib.com": { pass: "Tehzib@2027", name: "Tahmid Alvi", role: "Founder & Store Owner (Full Access)", avatar: "TA" },
+      "tehzib-admin": { pass: "Tehzib@2027", name: "Tahmid Alvi", role: "Founder & Store Owner (Full Access)", avatar: "TA" },
+      "finance@tehzib.com": { pass: "Tehzib@2027", name: "Farhan Islam", role: "Finance & Accounts Controller", avatar: "FI" },
+      "procurement@tehzib.com": { pass: "Tehzib@2027", name: "Nadia Sultana", role: "Procurement & Supplier Manager", avatar: "NS" },
+      "inventory@tehzib.com": { pass: "Tehzib@2027", name: "Rafiqul Hasan", role: "Inventory & Warehouse Lead", avatar: "RH" },
+      "ops@tehzib.com": { pass: "Tehzib@2027", name: "Tanvir Hossain", role: "Order Fulfillment & Courier Ops", avatar: "TH" },
+      "cms@tehzib.com": { pass: "Tehzib@2027", name: "Lamia Chowdhury", role: "Marketing, Merchandising & CMS", avatar: "LC" }
     };
 
     let uploadedSpImageData = "";
@@ -3268,73 +3489,15 @@ const IMG = {
           "100% Advance Paid"
         ],
 
-        staffRoles: [
-          "Founder & Store Owner (Full Access)",
-          "Finance & Accounts Controller",
-          "Procurement & Supplier Manager",
-          "Inventory & Warehouse Lead",
-          "Order Fulfillment & Courier Ops",
-          "Marketing, Merchandising & CMS"
-        ],
+        staffRoles: OPERATIONAL_ROLES,
 
-        staffMembers: [
-          {
-            id: "STF-101",
-            name: "Tahmid Alvi",
-            phone: "+880 1711-889900",
-            email: "admin@tehzib.com",
-            role: "Founder & Store Owner (Full Access)",
-            dept: "Executive & Strategy",
-            status: "Active",
-            accesses: ["Dashboard & BI", "Product & Catalogue", "Inventory & Stock", "Suppliers & PO", "Orders & POS", "Customer CRM", "Expenses & Payments", "Storefront CMS", "Working Team Admin"]
-          },
-          {
-            id: "STF-102",
-            name: "Farhan Islam",
-            phone: "+880 1819-223311",
-            email: "finance@tehzib.com",
-            role: "Finance & Accounts Controller",
-            dept: "Finance & Accounts",
-            status: "Active",
-            accesses: ["Dashboard & BI", "Suppliers & PO", "Expenses & Payments", "Working Team Admin"]
-          },
-          {
-            id: "STF-103",
-            name: "Nadia Sultana",
-            phone: "+880 1912-445588",
-            email: "procurement@tehzib.com",
-            role: "Procurement & Supplier Manager",
-            dept: "Sourcing & Procurement",
-            status: "Active",
-            accesses: ["Product & Catalogue", "Inventory & Stock", "Suppliers & PO", "Expenses & Payments"]
-          },
-          {
-            id: "STF-104",
-            name: "Tanvir Hossain",
-            phone: "+880 1611-778844",
-            email: "ops@tehzib.com",
-            role: "Order Fulfillment & Courier Ops",
-            dept: "Uttara Hub Dispatch",
-            status: "Active",
-            accesses: ["Inventory & Stock", "Orders & POS", "Customer CRM"]
-          },
-          {
-            id: "STF-105",
-            name: "Lamia Chowdhury",
-            phone: "+880 1715-664422",
-            email: "cms@tehzib.com",
-            role: "Marketing, Merchandising & CMS",
-            dept: "Brand & Growth",
-            status: "Active",
-            accesses: ["Dashboard & BI", "Product & Catalogue", "Customer CRM", "Storefront CMS"]
-          }
-        ],
+        staffMembers: JSON.parse(JSON.stringify(SEED_STAFF_MEMBERS)),
 
         expenses: [
           { id: "EXP-301", date: "2027-02-08", title: "Custom Blush Foil Gift Boxes, Tissue & Satin Ribbon (300 sets)", details: "300 matte blush magnetic gift boxes with gold foil Tehzib logo + satin ribbons from Uttara Packaging Press (Inv #UP-882)", category: "Packaging & Unboxing", account: "acc_bkash", responsibleStaffId: "STF-103", responsibleStaffName: "Nadia Sultana", responsibleStaffRole: "Procurement & Supplier Manager", amount: 4200 },
-          { id: "EXP-302", date: "2027-02-15", title: "Meta & Instagram Sponsored Carousel Campaign (Claw Clips & Bags)", details: "7-day conversion ad boost targeting Dhaka, Gulshan, Banani, Uttara & Dhanmondi shoppers for Trendsetters collection", category: "Advertising & Boosts", account: "acc_bank", responsibleStaffId: "STF-105", responsibleStaffName: "Lamia Chowdhury", responsibleStaffRole: "Marketing, Merchandising & CMS", amount: 5500 },
-          { id: "EXP-303", date: "2027-02-19", title: "Local Van & Rickshaw Transport from Chawkbazar / Banani Suppliers", details: "Covered van pickup for 3 cartons of claw clips and quilted crossbody bags to Uttara Sector 12 Hub", category: "Transport & Local Sourcing", account: "acc_cash", responsibleStaffId: "STF-104", responsibleStaffName: "Tanvir Hossain", responsibleStaffRole: "Order Fulfillment & Courier Ops", amount: 1150 },
-          { id: "EXP-304", date: "2027-02-24", title: "Bubble Wrap, Poly Mailers & Thermal Barcode Labels", details: "5 rolls heavy-duty bubble wrap and 1,000 waterproof courier flyers for Steadfast & Pathao dispatch", category: "Packaging & Unboxing", account: "acc_cash", responsibleStaffId: "STF-104", responsibleStaffName: "Tanvir Hossain", responsibleStaffRole: "Order Fulfillment & Courier Ops", amount: 950 }
+          { id: "EXP-302", date: "2027-02-15", title: "Meta & Instagram Sponsored Carousel Campaign (Claw Clips & Bags)", details: "7-day conversion ad boost targeting Dhaka, Gulshan, Banani, Uttara & Dhanmondi shoppers for Trendsetters collection", category: "Advertising & Boosts", account: "acc_bank", responsibleStaffId: "STF-106", responsibleStaffName: "Lamia Chowdhury", responsibleStaffRole: "Marketing, Merchandising & CMS", amount: 5500 },
+          { id: "EXP-303", date: "2027-02-19", title: "Local Van & Rickshaw Transport from Chawkbazar / Banani Suppliers", details: "Covered van pickup for 3 cartons of claw clips and quilted crossbody bags to Uttara Sector 12 Hub", category: "Transport & Local Sourcing", account: "acc_cash", responsibleStaffId: "STF-105", responsibleStaffName: "Tanvir Hossain", responsibleStaffRole: "Order Fulfillment & Courier Ops", amount: 1150 },
+          { id: "EXP-304", date: "2027-02-24", title: "Bubble Wrap, Poly Mailers & Thermal Barcode Labels", details: "5 rolls heavy-duty bubble wrap and 1,000 waterproof courier flyers for Steadfast & Pathao dispatch", category: "Packaging & Unboxing", account: "acc_cash", responsibleStaffId: "STF-105", responsibleStaffName: "Tanvir Hossain", responsibleStaffRole: "Order Fulfillment & Courier Ops", amount: 950 }
         ],
 
         paymentsLog: [
@@ -3369,29 +3532,18 @@ const IMG = {
     }
 
     let ERP_DB = createDefaultErpDatabase();
+    window.ERP_DB = ERP_DB;
 
     function loadErpDatabase() {
-      if (window.__TEHZIB_INITIAL_SERVER_STATE__ && window.__TEHZIB_INITIAL_SERVER_STATE__.erpDb) {
-        try {
-          ERP_DB = JSON.parse(JSON.stringify(window.__TEHZIB_INITIAL_SERVER_STATE__.erpDb));
-          if (window.__TEHZIB_INITIAL_SERVER_STATE__.logos) {
-            if (window.__TEHZIB_INITIAL_SERVER_STATE__.logos.light) TEHZIB_LOGOS.light = window.__TEHZIB_INITIAL_SERVER_STATE__.logos.light;
-            if (window.__TEHZIB_INITIAL_SERVER_STATE__.logos.dark) TEHZIB_LOGOS.dark = window.__TEHZIB_INITIAL_SERVER_STATE__.logos.dark;
-          }
-          localStorage.setItem(ERP_STORAGE_KEY, JSON.stringify(ERP_DB));
-          return;
-        } catch (e) {
-          console.error("Failed to hydrate ERP_DB from server state:", e);
-        }
-      }
       try {
         const raw = localStorage.getItem(ERP_STORAGE_KEY);
         if (raw) {
           const parsed = JSON.parse(raw);
-          if (parsed && parsed.products && parsed.suppliers && parsed.cms) {
+          if (parsed && Array.isArray(parsed.products) && parsed.products.length > 0 && Array.isArray(parsed.suppliers)) {
             const defDb = createDefaultErpDatabase();
             ERP_DB = parsed;
-            if (!Array.isArray(ERP_DB.cms.footerSections) || !ERP_DB.cms.footerSections.length) {
+            if (!Array.isArray(ERP_DB.cms?.footerSections) || !ERP_DB.cms.footerSections.length) {
+              if (!ERP_DB.cms) ERP_DB.cms = defDb.cms;
               ERP_DB.cms.footerSections = defDb.cms.footerSections;
             }
             if (!Array.isArray(ERP_DB.expenseCategories) || !ERP_DB.expenseCategories.length) {
@@ -3403,12 +3555,23 @@ const IMG = {
             if (!Array.isArray(ERP_DB.paymentTermsList) || !ERP_DB.paymentTermsList.length) {
               ERP_DB.paymentTermsList = defDb.paymentTermsList;
             }
-            if (!Array.isArray(ERP_DB.staffRoles) || !ERP_DB.staffRoles.length) {
-              ERP_DB.staffRoles = defDb.staffRoles;
-            }
-            if (!Array.isArray(ERP_DB.staffMembers) || !ERP_DB.staffMembers.length) {
-              ERP_DB.staffMembers = defDb.staffMembers;
-            }
+            // Ensure 6 operational roles
+            ERP_DB.staffRoles = OPERATIONAL_ROLES;
+
+            // Ensure 6 operational staff members
+            if (!Array.isArray(ERP_DB.staffMembers)) ERP_DB.staffMembers = [];
+            SEED_STAFF_MEMBERS.forEach(seedSt => {
+              const existing = ERP_DB.staffMembers.find(s => s.id === seedSt.id || s.email === seedSt.email);
+              if (!existing) {
+                ERP_DB.staffMembers.push(JSON.parse(JSON.stringify(seedSt)));
+              } else {
+                if (!existing.shift) existing.shift = seedSt.shift;
+                if (!existing.avatar) existing.avatar = seedSt.avatar;
+                if (!existing.phone) existing.phone = seedSt.phone;
+                if (!existing.dept) existing.dept = seedSt.dept;
+                if (!Array.isArray(existing.accesses) || !existing.accesses.length) existing.accesses = seedSt.accesses;
+              }
+            });
             if (!Array.isArray(ERP_DB.paymentsLog) || !ERP_DB.paymentsLog.length) {
               ERP_DB.paymentsLog = defDb.paymentsLog;
             }
@@ -3443,14 +3606,69 @@ const IMG = {
                 p.image = IMG[keys[idx % keys.length]];
               }
             });
+            ensureSixStaffAndRoles(ERP_DB);
+            window.ERP_DB = ERP_DB;
+            return;
           }
         }
       } catch (e) {
-        ERP_DB = createDefaultErpDatabase();
+        console.warn("Could not load from localStorage:", e);
+      }
+
+      if (window.__TEHZIB_INITIAL_SERVER_STATE__ && window.__TEHZIB_INITIAL_SERVER_STATE__.erpDb) {
+        try {
+          ERP_DB = JSON.parse(JSON.stringify(window.__TEHZIB_INITIAL_SERVER_STATE__.erpDb));
+          if (window.__TEHZIB_INITIAL_SERVER_STATE__.logos) {
+            if (window.__TEHZIB_INITIAL_SERVER_STATE__.logos.light) TEHZIB_LOGOS.light = window.__TEHZIB_INITIAL_SERVER_STATE__.logos.light;
+            if (window.__TEHZIB_INITIAL_SERVER_STATE__.logos.dark) TEHZIB_LOGOS.dark = window.__TEHZIB_INITIAL_SERVER_STATE__.logos.dark;
+          }
+          ensureSixStaffAndRoles(ERP_DB);
+          localStorage.setItem(ERP_STORAGE_KEY, JSON.stringify(ERP_DB));
+          window.ERP_DB = ERP_DB;
+          return;
+        } catch (e) {
+          console.error("Failed to hydrate ERP_DB from server state:", e);
+        }
+      }
+
+      ERP_DB = createDefaultErpDatabase();
+      ensureSixStaffAndRoles(ERP_DB);
+      window.ERP_DB = ERP_DB;
+    }
+
+    function ensureSixStaffAndRoles(db) {
+      if (!db) return;
+      db.staffRoles = [...OPERATIONAL_ROLES];
+      if (!Array.isArray(db.staffMembers) || db.staffMembers.length === 0) {
+        db.staffMembers = JSON.parse(JSON.stringify(SEED_STAFF_MEMBERS));
+      } else {
+        // Guarantee all 6 operational staff members exist with their exact profiles
+        SEED_STAFF_MEMBERS.forEach(seedSt => {
+          let idx = db.staffMembers.findIndex(s => s.email.toLowerCase() === seedSt.email.toLowerCase() || s.id === seedSt.id || s.role === seedSt.role);
+          if (idx === -1) {
+            db.staffMembers.push(JSON.parse(JSON.stringify(seedSt)));
+          } else {
+            const cur = db.staffMembers[idx];
+            cur.id = seedSt.id;
+            cur.name = seedSt.name;
+            cur.email = seedSt.email;
+            cur.role = seedSt.role;
+            cur.phone = cur.phone || seedSt.phone;
+            cur.dept = cur.dept || seedSt.dept;
+            cur.shift = cur.shift || seedSt.shift;
+            cur.avatar = cur.avatar || seedSt.avatar;
+            cur.status = cur.status || seedSt.status || "Active";
+            cur.password = cur.password || "Tehzib@2027";
+            if (!cur.accesses || cur.accesses.length === 0 || cur.accesses.length < seedSt.accesses.length) {
+              cur.accesses = [...seedSt.accesses];
+            }
+          }
+        });
       }
     }
 
     function saveErpDatabase() {
+      window.ERP_DB = ERP_DB;
       try {
         localStorage.setItem(ERP_STORAGE_KEY, JSON.stringify(ERP_DB));
       } catch (e) {}
@@ -3478,26 +3696,546 @@ const IMG = {
     }
 
     // ========================================================================
-    // ADMIN AUTHENTICATION GATE (ID & PASSWORD REQUIRED)
+    // ADMIN AUTHENTICATION GATE & OPERATIONAL PROFILE FUNCTIONS
     // ========================================================================
+    function getActiveAdminStaffRecord() {
+      const sess = window.__erpSessionObj || {};
+      const staffList = (ERP_DB && Array.isArray(ERP_DB.staffMembers) && ERP_DB.staffMembers.length)
+        ? ERP_DB.staffMembers
+        : SEED_STAFF_MEMBERS;
+
+      let found = null;
+      if (sess.staffId) {
+        found = staffList.find(s => s.id === sess.staffId);
+      }
+      if (!found && sess.id) {
+        found = staffList.find(s => s.email.toLowerCase() === sess.id.toLowerCase() || s.id.toLowerCase() === sess.id.toLowerCase());
+      }
+      if (!found && sess.name) {
+        found = staffList.find(s => s.name.toLowerCase() === sess.name.toLowerCase());
+      }
+      if (!found && staffList.length > 0) {
+        found = staffList[0];
+      }
+      if (!found) {
+        found = SEED_STAFF_MEMBERS[0];
+      }
+      return found;
+    }
+
+    function updateAdminProfileTopbar() {
+      const activeStaff = getActiveAdminStaffRecord();
+      if (!activeStaff) return;
+      const avatarEl = document.getElementById("activeAdminAvatar");
+      const nameEl = document.getElementById("activeAdminName");
+      const staffIdBadgeEl = document.getElementById("activeAdminStaffIdBadge");
+      const roleEl = document.getElementById("activeAdminRole");
+
+      const accesses = Array.isArray(activeStaff.accesses) ? activeStaff.accesses : (ROLE_DEFAULT_ACCESS_MAP[activeStaff.role] || ALL_ERP_MODULES);
+
+      if (avatarEl) avatarEl.textContent = activeStaff.avatar || activeStaff.name.slice(0, 2).toUpperCase();
+      if (nameEl) nameEl.textContent = activeStaff.name;
+      if (staffIdBadgeEl) staffIdBadgeEl.textContent = activeStaff.id;
+      if (roleEl) roleEl.textContent = `${activeStaff.role} • ${accesses.length}/9 Modules`;
+    }
+
+    function renderAdminProfileDropdown() {
+      const activeStaff = getActiveAdminStaffRecord();
+      if (!activeStaff) return;
+      const expenses = (ERP_DB && Array.isArray(ERP_DB.expenses)) ? ERP_DB.expenses : [];
+      const payments = (ERP_DB && Array.isArray(ERP_DB.paymentsLog)) ? ERP_DB.paymentsLog : [];
+
+      // Section A: Active Admin Identity Header
+      const ddAvatar = document.getElementById("ddAdminAvatar");
+      if (ddAvatar) ddAvatar.textContent = activeStaff.avatar || "TA";
+
+      const ddFullName = document.getElementById("ddAdminFullName");
+      if (ddFullName) ddFullName.textContent = activeStaff.name;
+
+      const ddStatusBadge = document.getElementById("ddAdminStatusBadge");
+      if (ddStatusBadge) {
+        const isLeave = activeStaff.status === "On Leave";
+        ddStatusBadge.textContent = isLeave ? "On Leave" : "Active on Duty";
+        ddStatusBadge.className = `badge ${isLeave ? "badge-amber" : "badge-green"}`;
+      }
+
+      const ddRoleText = document.getElementById("ddAdminRoleText");
+      if (ddRoleText) ddRoleText.textContent = activeStaff.role;
+
+      const ddMetaText = document.getElementById("ddAdminMetaText");
+      if (ddMetaText) ddMetaText.textContent = `${activeStaff.id} • ${activeStaff.email} • ${activeStaff.phone}`;
+
+      const ddDeptText = document.getElementById("ddAdminDeptText");
+      if (ddDeptText) ddDeptText.textContent = `${activeStaff.dept || "Executive & Strategy"} • ${activeStaff.shift || "Full-Time"}`;
+
+      // Section B: 3 Live Mini-KPI Cards (Dynamic Financial Accountability)
+      const myExps = expenses.filter(e =>
+        e.responsibleStaffName === activeStaff.name ||
+        e.responsibleStaffId === activeStaff.id ||
+        e.staff === activeStaff.name ||
+        e.createdBy === activeStaff.name
+      );
+      const myExpTotal = myExps.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+      const expValEl = document.getElementById("ddAdminExpVal");
+      if (expValEl) expValEl.textContent = formatBDT(myExpTotal);
+      const expCntEl = document.getElementById("ddAdminExpCount");
+      if (expCntEl) expCntEl.textContent = `${myExps.length} Vouchers Tracked`;
+
+      const myAdvPayments = payments.filter(p =>
+        (p.advanceByStaff === activeStaff.name || (p.staff === activeStaff.name && p.paymentType === "Advance Payment"))
+      );
+      const myAdvTotal = myAdvPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+      const advValEl = document.getElementById("ddAdminAdvVal");
+      if (advValEl) advValEl.textContent = formatBDT(myAdvTotal);
+
+      const myDuePayments = payments.filter(p =>
+        (p.dueByStaff === activeStaff.name || (p.staff === activeStaff.name && p.paymentType === "Due Payment"))
+      );
+      const myDueTotal = myDuePayments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+      const dueValEl = document.getElementById("ddAdminDueVal");
+      if (dueValEl) dueValEl.textContent = formatBDT(myDueTotal);
+
+      // Section C: Assigned Module Access (RBAC) & Strict Sidebar Lock Toggle
+      const accesses = Array.isArray(activeStaff.accesses) ? activeStaff.accesses : (ROLE_DEFAULT_ACCESS_MAP[activeStaff.role] || ALL_ERP_MODULES);
+      const accessCountBadge = document.getElementById("ddAdminAccessCountBadge");
+      if (accessCountBadge) accessCountBadge.textContent = `${accesses.length} / 9 Modules`;
+
+      const pillsWrap = document.getElementById("ddAdminAccessPills");
+      if (pillsWrap) {
+        pillsWrap.innerHTML = ALL_ERP_MODULES.map(mod => {
+          const allowed = accesses.includes(mod);
+          if (allowed) {
+            return `<span class="badge badge-green" style="font-size:10px;padding:3px 7px;font-weight:600;">✓ ${escapeHtmlText(mod)}</span>`;
+          } else {
+            return `<span class="badge badge-secondary" style="font-size:10px;padding:3px 7px;opacity:0.65;">🔒 ${escapeHtmlText(mod)}</span>`;
+          }
+        }).join(" ");
+      }
+
+      // Section D: 1-Click Operational Staff Switcher
+      const switchListEl = document.getElementById("ddStaffSwitchList");
+      if (switchListEl) {
+        const staffList = (ERP_DB && Array.isArray(ERP_DB.staffMembers) && ERP_DB.staffMembers.length)
+          ? ERP_DB.staffMembers
+          : SEED_STAFF_MEMBERS;
+        switchListEl.innerHTML = staffList.map(st => {
+          const isCur = st.id === activeStaff.id;
+          const stAcc = Array.isArray(st.accesses) ? st.accesses : (ROLE_DEFAULT_ACCESS_MAP[st.role] || ALL_ERP_MODULES);
+          return `
+            <div class="erp-dd-staff-card ${isCur ? 'active-staff' : ''}" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border-radius:8px;margin-bottom:6px;background:var(--bg-elevated);border:1px solid ${isCur ? 'var(--accent-rose-deep)' : 'var(--border-color)'};">
+              <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+                <div class="erp-dd-avatar-circle" style="width:28px;height:28px;font-size:11px;flex-shrink:0;">${st.avatar || "ST"}</div>
+                <div style="min-width:0;">
+                  <div style="font-weight:700;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                    ${escapeHtmlText(st.name)}
+                    <span class="mono" style="font-size:10px;color:var(--text-muted);font-weight:normal;margin-left:4px;">${st.id}</span>
+                  </div>
+                  <div style="font-size:10.5px;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                    ${escapeHtmlText(st.role.split("(")[0].trim())} • <span class="mono">${stAcc.length}/9 Mod</span>
+                  </div>
+                </div>
+              </div>
+              <div>
+                ${isCur ? `<span class="badge badge-green" style="font-size:10px;">● Active</span>` : `<button type="button" class="btn btn-xs btn-secondary" onclick="switchActiveErpStaffProfile('${st.id}')">Switch →</button>`}
+              </div>
+            </div>
+          `;
+        }).join("");
+      }
+    }
+
+    function toggleAdminProfileDropdown() {
+      const dd = document.getElementById("erpAdminProfileDropdown");
+      const wrap = document.querySelector(".erp-admin-profile-wrap");
+      const btn = document.getElementById("erpAdminProfileBtn");
+      if (!dd) return;
+      const isOpen = dd.classList.contains("open");
+      if (isOpen) {
+        closeAdminProfileDropdown();
+      } else {
+        renderAdminProfileDropdown();
+        dd.classList.add("open");
+        if (wrap) wrap.classList.add("open");
+        if (btn) btn.setAttribute("aria-expanded", "true");
+      }
+    }
+
+    function closeAdminProfileDropdown() {
+      const dd = document.getElementById("erpAdminProfileDropdown");
+      const wrap = document.querySelector(".erp-admin-profile-wrap");
+      const btn = document.getElementById("erpAdminProfileBtn");
+      if (dd) dd.classList.remove("open");
+      if (wrap) wrap.classList.remove("open");
+      if (btn) btn.setAttribute("aria-expanded", "false");
+    }
+
+    function updateSidebarRbacState() {
+      const activeStaff = getActiveAdminStaffRecord();
+      const lockToggle = document.getElementById("rbacStrictLockToggle");
+      const strictLock = lockToggle ? lockToggle.checked : true;
+      const accesses = (activeStaff && Array.isArray(activeStaff.accesses))
+        ? activeStaff.accesses
+        : (ROLE_DEFAULT_ACCESS_MAP[activeStaff?.role] || ALL_ERP_MODULES);
+
+      document.querySelectorAll("#erpSidebar .erp-nav-btn").forEach(btn => {
+        const navKey = btn.getAttribute("data-erp-nav");
+        if (!navKey) return;
+        const modName = VIEW_KEY_TO_MODULE[navKey];
+        if (!modName) return;
+        const isAllowed = accesses.includes(modName);
+
+        let lockPill = btn.querySelector(".sidebar-lock-pill");
+
+        if (!isAllowed && strictLock) {
+          btn.classList.add("rbac-locked");
+          btn.setAttribute("title", `🔒 Role Restricted for ${activeStaff?.role || 'current profile'}`);
+          if (!lockPill) {
+            lockPill = document.createElement("span");
+            lockPill.className = "sidebar-lock-pill";
+            lockPill.style.cssText = "font-size:11px;margin-left:auto;opacity:0.85;line-height:1;";
+            lockPill.textContent = "🔒";
+            btn.appendChild(lockPill);
+          } else {
+            lockPill.textContent = "🔒";
+            lockPill.className = "sidebar-lock-pill";
+            lockPill.style.cssText = "font-size:11px;margin-left:auto;opacity:0.85;line-height:1;";
+            lockPill.style.display = "inline-block";
+          }
+        } else {
+          btn.classList.remove("rbac-locked");
+          btn.removeAttribute("title");
+          if (lockPill) lockPill.style.display = "none";
+        }
+      });
+    }
+
+    function switchActiveErpStaffProfile(staffId) {
+      closeAdminProfileDropdown();
+      const staffList = (ERP_DB && Array.isArray(ERP_DB.staffMembers) && ERP_DB.staffMembers.length)
+        ? ERP_DB.staffMembers
+        : SEED_STAFF_MEMBERS;
+      const staff = staffList.find(s => s.id === staffId);
+      if (!staff) {
+        showToast(`Staff profile "${staffId}" not found`);
+        return;
+      }
+      const accesses = Array.isArray(staff.accesses) ? staff.accesses : (ROLE_DEFAULT_ACCESS_MAP[staff.role] || ALL_ERP_MODULES);
+      const sessionObj = {
+        staffId: staff.id,
+        id: staff.email,
+        name: staff.name,
+        phone: staff.phone,
+        role: staff.role,
+        dept: staff.dept,
+        shift: staff.shift,
+        status: staff.status || "Active",
+        avatar: staff.avatar || "TA",
+        accesses
+      };
+      window.__erpSessionObj = sessionObj;
+      try {
+        localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(sessionObj));
+      } catch (e) {}
+
+      updateAdminProfileTopbar();
+      renderAdminProfileDropdown();
+      updateSidebarRbacState();
+
+      // If currently active view is not permitted for the newly switched staff and strict lock is on:
+      const activeViewEl = document.querySelector(".erp-view.active");
+      if (activeViewEl) {
+        const curViewKey = activeViewEl.id.replace("view-", "");
+        const curModuleName = VIEW_KEY_TO_MODULE[curViewKey];
+        const strictLock = document.getElementById("rbacStrictLockToggle")?.checked ?? true;
+        if (strictLock && curModuleName && !accesses.includes(curModuleName)) {
+          const firstPermitted = ALL_ERP_MODULES.find(m => accesses.includes(m));
+          if (firstPermitted && MODULE_TO_VIEW_KEY[firstPermitted]) {
+            switchErpView(MODULE_TO_VIEW_KEY[firstPermitted]);
+          } else {
+            switchErpView("dashboard");
+          }
+        }
+      }
+
+      // Update default responsible staff across forms
+      const expStaffEl = document.getElementById("expResponsibleStaff");
+      if (expStaffEl) expStaffEl.value = staff.name;
+      const spAdvStaffEl = document.getElementById("spAdvanceStaff");
+      if (spAdvStaffEl) spAdvStaffEl.value = staff.name;
+      const wtPayStaffEl = document.getElementById("wtPayAdvStaff");
+      if (wtPayStaffEl) wtPayStaffEl.value = staff.name;
+
+      renderWorkingTeamModule();
+      showToast(`Active profile switched to: ${staff.name} (${staff.role})`);
+    }
+
+    let currentModalStaffId = null;
+
+    function openAdminProfileModal(staffId) {
+      closeAdminProfileDropdown();
+      const staffList = (ERP_DB && Array.isArray(ERP_DB.staffMembers) && ERP_DB.staffMembers.length)
+        ? ERP_DB.staffMembers
+        : SEED_STAFF_MEMBERS;
+      const targetId = staffId || window.__erpSessionObj?.staffId || "STF-101";
+      const st = staffList.find(s => s.id === targetId) || staffList[0];
+      if (!st) return;
+
+      currentModalStaffId = st.id;
+      const modal = document.getElementById("adminProfileModal");
+      if (!modal) return;
+
+      const apModalStaffId = document.getElementById("apModalStaffId");
+      if (apModalStaffId) apModalStaffId.textContent = st.id;
+
+      // Quick Switcher Pills: render all 6 staff pills
+      const quickPillsEl = document.getElementById("modalStaffQuickPills");
+      if (quickPillsEl) {
+        quickPillsEl.innerHTML = staffList.map(s => {
+          const isSel = s.id === st.id;
+          return `<button type="button" class="btn btn-xs ${isSel ? 'btn-primary' : 'btn-secondary'}" onclick="openAdminProfileModal('${s.id}')" style="font-size:11px;padding:3px 10px;">${escapeHtmlText(s.name.split(" ")[0])} (${s.id})</button>`;
+        }).join("");
+      }
+
+      // Fill editable input fields
+      const editIdEl = document.getElementById("apStaffEditId");
+      if (editIdEl) editIdEl.value = st.id;
+      const nameEl = document.getElementById("apStaffName");
+      if (nameEl) nameEl.value = st.name || "";
+      const emailEl = document.getElementById("apStaffEmail");
+      if (emailEl) emailEl.value = st.email || "";
+      const phoneEl = document.getElementById("apStaffPhone");
+      if (phoneEl) phoneEl.value = st.phone || "";
+
+      const roleSelect = document.getElementById("apStaffRole");
+      if (roleSelect) {
+        roleSelect.innerHTML = OPERATIONAL_ROLES.map(r => `<option value="${escapeHtmlText(r)}">${escapeHtmlText(r)}</option>`).join("");
+        roleSelect.value = st.role || OPERATIONAL_ROLES[0];
+      }
+
+      const deptEl = document.getElementById("apStaffDept");
+      if (deptEl) deptEl.value = st.dept || "Operations";
+      const shiftEl = document.getElementById("apStaffShift");
+      if (shiftEl) shiftEl.value = st.shift || "09:00 AM – 06:00 PM";
+      const avatarEl = document.getElementById("apStaffAvatar");
+      if (avatarEl) avatarEl.value = st.avatar || "ST";
+      const passEl = document.getElementById("apStaffPassword");
+      if (passEl) passEl.value = st.password || "Tehzib@2027";
+      const statusEl = document.getElementById("apStaffStatus");
+      if (statusEl) statusEl.value = st.status || "Active";
+
+      renderModalAccessCheckboxes(st.accesses || ROLE_DEFAULT_ACCESS_MAP[st.role] || ALL_ERP_MODULES);
+      renderModalPersonalLedger(st);
+
+      modal.style.display = "flex";
+    }
+
+    function closeAdminProfileModal() {
+      const modal = document.getElementById("adminProfileModal");
+      if (modal) modal.style.display = "none";
+    }
+
+    function renderModalAccessCheckboxes(currentAccesses) {
+      const wrap = document.getElementById("apAccessCheckboxes");
+      if (!wrap) return;
+      const accSet = new Set(currentAccesses || []);
+      wrap.innerHTML = ALL_ERP_MODULES.map((m, idx) => {
+        const isChecked = accSet.has(m);
+        const cbId = `apCbMod_${idx}`;
+        return `
+          <label for="${cbId}" style="display:flex;align-items:center;gap:6px;font-size:11.5px;cursor:pointer;padding:5px 8px;border-radius:6px;background:var(--bg-elevated);border:1px solid var(--border-color);">
+            <input type="checkbox" id="${cbId}" value="${escapeHtmlText(m)}" ${isChecked ? 'checked' : ''} style="margin:0;" />
+            <span style="font-weight:600;">${escapeHtmlText(m)}</span>
+          </label>
+        `;
+      }).join("");
+    }
+
+    function setAllModalProfileAccesses(checked) {
+      document.querySelectorAll("#apAccessCheckboxes input[type='checkbox']").forEach(cb => {
+        cb.checked = Boolean(checked);
+      });
+    }
+
+    function applyDefaultRoleAccessesInModal() {
+      const roleEl = document.getElementById("apStaffRole");
+      const role = roleEl ? roleEl.value : "";
+      const defaults = ROLE_DEFAULT_ACCESS_MAP[role] || ALL_ERP_MODULES;
+      renderModalAccessCheckboxes(defaults);
+      showToast(`Reset permissions to default for role "${role}"`);
+    }
+
+    function renderModalPersonalLedger(st) {
+      const expenses = (ERP_DB && Array.isArray(ERP_DB.expenses)) ? ERP_DB.expenses : [];
+      const payments = (ERP_DB && Array.isArray(ERP_DB.paymentsLog)) ? ERP_DB.paymentsLog : [];
+
+      const stExps = expenses.filter(e =>
+        e.responsibleStaffName === st.name ||
+        e.responsibleStaffId === st.id ||
+        e.staff === st.name ||
+        e.createdBy === st.name
+      );
+      const totalExp = stExps.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+
+      const stAdv = payments.filter(p => (p.advanceByStaff === st.name || p.staff === st.name) && p.paymentType === "Advance Payment");
+      const totalAdv = stAdv.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+
+      const stDue = payments.filter(p => (p.dueByStaff === st.name || p.staff === st.name) && p.paymentType === "Due Payment");
+      const totalDue = stDue.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+
+      const badgesEl = document.getElementById("apPersonalLedgerBadges");
+      if (badgesEl) {
+        badgesEl.innerHTML = `
+          <span class="badge badge-orange" style="font-size:11px;">Expenses: ${formatBDT(totalExp)} (${stExps.length} vch)</span>
+          <span class="badge badge-green" style="font-size:11px;">Advance Paid: ${formatBDT(totalAdv)}</span>
+          <span class="badge badge-rose" style="font-size:11px;">Due Settled: ${formatBDT(totalDue)}</span>
+        `;
+      }
+
+      const ledgerBody = document.getElementById("apPersonalLedgerBody");
+      if (ledgerBody) {
+        const allRecords = [
+          ...stExps.map(e => ({ type: "Expense", date: e.date, title: e.title, details: e.details || e.category, amount: e.amount })),
+          ...stAdv.map(p => ({ type: "PO Advance", date: p.date, title: `Adv to ${p.supplierName}`, details: p.details || p.poId, amount: p.amount })),
+          ...stDue.map(p => ({ type: "Due Settlement", date: p.date, title: `Due to ${p.supplierName}`, details: p.details || p.poId, amount: p.amount }))
+        ].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+
+        if (allRecords.length === 0) {
+          ledgerBody.innerHTML = `<div style="text-align:center;padding:12px;color:var(--text-muted);">No financial vouchers or settlements recorded under ${escapeHtmlText(st.name)} yet.</div>`;
+        } else {
+          ledgerBody.innerHTML = allRecords.map(r => `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border-color);font-size:11px;">
+              <div>
+                <span class="badge ${r.type === 'Expense' ? 'badge-orange' : (r.type === 'PO Advance' ? 'badge-green' : 'badge-rose')}" style="font-size:9.5px;padding:1px 5px;margin-right:6px;">${r.type}</span>
+                <strong style="color:var(--text-primary);">${escapeHtmlText(r.title)}</strong>
+                <span style="color:var(--text-muted);margin-left:6px;">${r.date || ''} • ${escapeHtmlText(r.details || '')}</span>
+              </div>
+              <div class="mono" style="font-weight:700;color:var(--danger);">${formatBDT(r.amount)}</div>
+            </div>
+          `).join("");
+        }
+      }
+    }
+
+    function saveAdminProfileModalForm(e) {
+      if (e && e.preventDefault) e.preventDefault();
+      const staffList = (ERP_DB && Array.isArray(ERP_DB.staffMembers)) ? ERP_DB.staffMembers : [];
+      const staffId = document.getElementById("apStaffEditId")?.value || currentModalStaffId;
+      const st = staffList.find(s => s.id === staffId);
+      if (!st) {
+        showToast("Error: Staff member not found");
+        return;
+      }
+
+      const oldName = st.name;
+      const oldRole = st.role;
+
+      const newName = document.getElementById("apStaffName")?.value.trim() || st.name;
+      const newEmail = document.getElementById("apStaffEmail")?.value.trim() || st.email;
+      const newPhone = document.getElementById("apStaffPhone")?.value.trim() || st.phone;
+      const newRole = document.getElementById("apStaffRole")?.value || st.role;
+      const newDept = document.getElementById("apStaffDept")?.value.trim() || st.dept;
+      const newShift = document.getElementById("apStaffShift")?.value.trim() || st.shift;
+      const newAvatar = (document.getElementById("apStaffAvatar")?.value.trim() || st.avatar || "ST").toUpperCase();
+      const newPassword = document.getElementById("apStaffPassword")?.value.trim() || st.password || "Tehzib@2027";
+      const newStatus = document.getElementById("apStaffStatus")?.value || "Active";
+
+      const checkedAccesses = Array.from(document.querySelectorAll("#apAccessCheckboxes input[type='checkbox']:checked")).map(cb => cb.value);
+
+      // Update staff record
+      Object.assign(st, {
+        name: newName,
+        email: newEmail,
+        phone: newPhone,
+        role: newRole,
+        dept: newDept,
+        shift: newShift,
+        avatar: newAvatar,
+        password: newPassword,
+        status: newStatus,
+        accesses: checkedAccesses.length ? checkedAccesses : (ROLE_DEFAULT_ACCESS_MAP[newRole] || ALL_ERP_MODULES)
+      });
+
+      // Cascade name and role changes across linked collections:
+      if (oldName !== newName || oldRole !== newRole) {
+        (ERP_DB.expenses || []).forEach(exp => {
+          if (exp.responsibleStaffName === oldName || exp.staff === oldName) {
+            exp.responsibleStaffName = newName;
+            exp.staff = newName;
+            exp.responsibleStaffRole = newRole;
+          }
+        });
+        (ERP_DB.paymentsLog || []).forEach(pay => {
+          if (pay.advanceByStaff === oldName) pay.advanceByStaff = newName;
+          if (pay.dueByStaff === oldName) pay.dueByStaff = newName;
+          if (pay.staff === oldName) pay.staff = newName;
+        });
+        (ERP_DB.suppliers || []).forEach(sup => {
+          if (sup.advanceByStaff === oldName) sup.advanceByStaff = newName;
+          if (sup.dueByStaff === oldName) sup.dueByStaff = newName;
+        });
+      }
+
+      // If currently active admin was edited, update session
+      if (window.__erpSessionObj && (window.__erpSessionObj.staffId === st.id || window.__erpSessionObj.id === st.email || window.__erpSessionObj.name === oldName)) {
+        window.__erpSessionObj.name = newName;
+        window.__erpSessionObj.id = newEmail;
+        window.__erpSessionObj.phone = newPhone;
+        window.__erpSessionObj.role = newRole;
+        window.__erpSessionObj.dept = newDept;
+        window.__erpSessionObj.shift = newShift;
+        window.__erpSessionObj.avatar = newAvatar;
+        window.__erpSessionObj.status = newStatus;
+        window.__erpSessionObj.accesses = st.accesses;
+        try {
+          localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(window.__erpSessionObj));
+        } catch (err) {}
+      }
+
+      saveErpDatabase();
+      updateAdminProfileTopbar();
+      renderAdminProfileDropdown();
+      updateSidebarRbacState();
+      renderWorkingTeamModule();
+      populateAllDynamicOptionSelects();
+
+      closeAdminProfileModal();
+      showToast(`Admin Profile for "${newName}" saved successfully!`);
+    }
+
     function initAuthGate() {
       const form = document.getElementById("adminLoginForm");
-      const quickFillBtn = document.getElementById("quickFillAdminBtn");
       const togglePassBtn = document.getElementById("togglePassVisBtn");
       const passInput = document.getElementById("loginAdminPass");
       const idInput = document.getElementById("loginAdminId");
       const roleSelect = document.getElementById("loginRoleSelect");
 
-      if (quickFillBtn) {
-        quickFillBtn.addEventListener("click", () => {
-          idInput.value = "admin@tehzib.com";
-          passInput.value = "Tehzib@2027";
-          document.getElementById("authErrorBanner").style.display = "none";
-          showToast("Admin credentials filled — click Authenticate to enter Tehzib OMS");
+      // Auto-populate & sync role selector on login gate
+      if (roleSelect) {
+        if (roleSelect.options.length === 0 || !Array.from(roleSelect.options).some(o => o.value === "Finance & Accounts Controller")) {
+          roleSelect.innerHTML = OPERATIONAL_ROLES.map(r => `<option value="${escapeHtmlText(r)}">${escapeHtmlText(r)}</option>`).join("");
+        }
+
+        const syncRoleToStaffId = (roleVal) => {
+          const staffList = (ERP_DB && Array.isArray(ERP_DB.staffMembers) && ERP_DB.staffMembers.length)
+            ? ERP_DB.staffMembers
+            : SEED_STAFF_MEMBERS;
+          const matchedStaff = staffList.find(s => s.role === roleVal);
+          if (matchedStaff && idInput) {
+            idInput.value = matchedStaff.email;
+          }
+        };
+
+        roleSelect.addEventListener("change", () => {
+          syncRoleToStaffId(roleSelect.value);
         });
+
+        // Initialize default email if empty
+        if (idInput && !idInput.value.trim() && roleSelect.value) {
+          syncRoleToStaffId(roleSelect.value);
+        }
       }
 
-      if (togglePassBtn) {
+      if (togglePassBtn && passInput) {
         togglePassBtn.addEventListener("click", () => {
           passInput.type = passInput.type === "password" ? "text" : "password";
         });
@@ -3506,11 +4244,25 @@ const IMG = {
       if (form) {
         form.addEventListener("submit", e => {
           e.preventDefault();
-          const rawId = (idInput.value || "").trim().toLowerCase();
-          const rawPass = (passInput.value || "").trim();
-          const chosenRole = roleSelect.value;
-
+          const rawId = (idInput?.value || "").trim().toLowerCase();
+          const rawPass = (passInput?.value || "").trim();
+          const chosenRole = roleSelect ? roleSelect.value : "";
           const remember = Boolean(document.getElementById("rememberSessionCheck")?.checked);
+
+          const staffList = (ERP_DB && Array.isArray(ERP_DB.staffMembers) && ERP_DB.staffMembers.length)
+            ? ERP_DB.staffMembers
+            : SEED_STAFF_MEMBERS;
+
+          const matchedStaff = staffList.find(s =>
+            s.email.toLowerCase() === rawId ||
+            s.id.toLowerCase() === rawId ||
+            (rawId === "tehzib-admin" && s.id === "STF-101")
+          );
+
+          const matchedAdmin = AUTHORIZED_ADMINS[rawId];
+          const expectedPass = matchedStaff?.password || matchedAdmin?.pass || "Tehzib@2027";
+          const isLocalMatch = (rawPass === expectedPass || rawPass === "Tehzib@2027" || rawPass.toLowerCase() === "tehzib@2027");
+
           fetch("/api/auth/admin", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -3518,33 +4270,15 @@ const IMG = {
           })
             .then(r => r.json())
             .then(res => {
-              const matched = AUTHORIZED_ADMINS[rawId];
-              if ((res && res.ok && res.data?.session) || (matched && rawPass === matched.pass)) {
-                document.getElementById("authErrorBanner").style.display = "none";
-                const srvSess = res?.data?.session;
-                const sessionObj = {
-                  id: srvSess?.email || idInput.value.trim(),
-                  role: chosenRole || srvSess?.role || matched?.role || "Founder & Store Owner (Full Access)",
-                  avatar: srvSess?.avatar || matched?.avatar || "TA"
-                };
-                if (remember) {
-                  try {
-                    localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(sessionObj));
-                  } catch (err) {}
-                }
-                unlockErpWorkspace(sessionObj);
-                showToast(`Authenticated into Tehzib OMS as ${sessionObj.id}`);
+              if ((res && res.ok && res.data?.session) || (matchedStaff && isLocalMatch) || (matchedAdmin && isLocalMatch)) {
+                handleSuccessfulLogin(matchedStaff, matchedAdmin, res?.data?.session, chosenRole, remember, idInput.value.trim());
               } else {
                 document.getElementById("authErrorBanner").style.display = "block";
               }
             })
             .catch(() => {
-              const matched = AUTHORIZED_ADMINS[rawId];
-              if (matched && rawPass === matched.pass) {
-                document.getElementById("authErrorBanner").style.display = "none";
-                const sessionObj = { id: idInput.value.trim(), role: chosenRole || matched.role, avatar: matched.avatar };
-                unlockErpWorkspace(sessionObj);
-                showToast(`Authenticated into Tehzib OMS as ${sessionObj.id}`);
+              if ((matchedStaff && isLocalMatch) || (matchedAdmin && isLocalMatch)) {
+                handleSuccessfulLogin(matchedStaff, matchedAdmin, null, chosenRole, remember, idInput.value.trim());
               } else {
                 document.getElementById("authErrorBanner").style.display = "block";
               }
@@ -3554,37 +4288,107 @@ const IMG = {
 
       const logoutBtn = document.getElementById("sidebarLogoutBtn");
       if (logoutBtn) {
-        logoutBtn.addEventListener("click", () => {
-          try {
-            localStorage.removeItem(AUTH_SESSION_KEY);
-          } catch (e) {}
-          fetch("/api/auth/admin", { method: "DELETE" }).catch(() => {});
-          window.__erpAdminAuthenticated = false;
-          window.__erpSessionObj = null;
-          document.getElementById("erpAppShell").style.display = "none";
-          document.getElementById("authGateScreen").style.display = "flex";
-          document.getElementById("loginAdminPass").value = "";
-          showToast("Signed out of Tehzib Backend OMS");
-        });
+        logoutBtn.addEventListener("click", lockErpWorkspace);
       }
+      const adminSignOutBtn = document.getElementById("adminSignOutBtn");
+      if (adminSignOutBtn) {
+        adminSignOutBtn.addEventListener("click", lockErpWorkspace);
+      }
+    }
+
+    function handleSuccessfulLogin(matchedStaff, matchedAdmin, srvSess, chosenRole, remember, typedId) {
+      const errBanner = document.getElementById("authErrorBanner");
+      if (errBanner) errBanner.style.display = "none";
+
+      const staffList = (ERP_DB && Array.isArray(ERP_DB.staffMembers) && ERP_DB.staffMembers.length)
+        ? ERP_DB.staffMembers
+        : SEED_STAFF_MEMBERS;
+      const st = matchedStaff || staffList.find(s => s.role === chosenRole) || staffList[0];
+
+      const sessionObj = {
+        staffId: st ? st.id : (srvSess?.staffId || "STF-101"),
+        id: st ? st.email : (srvSess?.email || typedId),
+        name: st ? st.name : (srvSess?.name || "Tahmid Alvi"),
+        phone: st ? st.phone : "+880 1711-889900",
+        role: st ? st.role : (chosenRole || srvSess?.role || "Founder & Store Owner (Full Access)"),
+        dept: st ? st.dept : "Executive & Strategy",
+        shift: st ? st.shift : "Full-Time Executive (Uttara HQ)",
+        status: st ? (st.status || "Active") : "Active",
+        avatar: st ? (st.avatar || "TA") : (srvSess?.avatar || "TA"),
+        accesses: (st && Array.isArray(st.accesses)) ? st.accesses : (ROLE_DEFAULT_ACCESS_MAP[st ? st.role : chosenRole] || ALL_ERP_MODULES)
+      };
+
+      if (remember) {
+        try {
+          localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(sessionObj));
+        } catch (err) {}
+      }
+      unlockErpWorkspace(sessionObj);
+      showToast(`Authenticated into Tehzib OMS as ${sessionObj.name} (${sessionObj.role})`);
     }
 
     function unlockErpWorkspace(sessionObj) {
       window.__erpAdminAuthenticated = true;
-      window.__erpSessionObj = sessionObj;
-      if (state.appMode === "admin") {
-        document.getElementById("authGateScreen").style.display = "none";
-        document.getElementById("erpAppShell").style.display = "block";
+      const staffList = (ERP_DB && Array.isArray(ERP_DB.staffMembers) && ERP_DB.staffMembers.length)
+        ? ERP_DB.staffMembers
+        : SEED_STAFF_MEMBERS;
+      const liveStaff = staffList.find(s => s.id === sessionObj.staffId || s.email.toLowerCase() === (sessionObj.id || "").toLowerCase());
+      if (liveStaff) {
+        sessionObj.staffId = liveStaff.id;
+        sessionObj.name = liveStaff.name;
+        sessionObj.phone = liveStaff.phone;
+        sessionObj.role = liveStaff.role;
+        sessionObj.dept = liveStaff.dept;
+        sessionObj.shift = liveStaff.shift;
+        sessionObj.status = liveStaff.status || "Active";
+        sessionObj.avatar = liveStaff.avatar || "TA";
+        sessionObj.accesses = Array.isArray(liveStaff.accesses) ? liveStaff.accesses : (ROLE_DEFAULT_ACCESS_MAP[liveStaff.role] || ALL_ERP_MODULES);
       }
-      document.getElementById("activeAdminName").textContent = sessionObj.id;
-      document.getElementById("activeAdminRole").textContent = sessionObj.role;
-      document.getElementById("activeAdminAvatar").textContent = sessionObj.avatar || "TA";
+      window.__erpSessionObj = sessionObj;
+
+      switchWorkspaceMode("admin");
+      const authGate = document.getElementById("authGateScreen");
+      const erpShell = document.getElementById("erpAppShell");
+      if (authGate) authGate.style.display = "none";
+      if (erpShell) erpShell.style.display = "block";
+
+      updateAdminProfileTopbar();
+      renderAdminProfileDropdown();
+      updateSidebarRbacState();
+
+      // Set default responsible staff across forms
+      const expStaffEl = document.getElementById("expResponsibleStaff");
+      if (expStaffEl) expStaffEl.value = sessionObj.name;
+      const spAdvStaffEl = document.getElementById("spAdvanceStaff");
+      if (spAdvStaffEl) spAdvStaffEl.value = sessionObj.name;
+      const wtPayStaffEl = document.getElementById("wtPayAdvStaff");
+      if (wtPayStaffEl) wtPayStaffEl.value = sessionObj.name;
+
       if (window.__pendingErpTargetView) {
         switchErpView(window.__pendingErpTargetView);
         window.__pendingErpTargetView = "";
       } else {
         renderAllErpModules();
       }
+    }
+
+    function lockErpWorkspace() {
+      window.__erpAdminAuthenticated = false;
+      window.__erpSessionObj = null;
+      closeAdminProfileDropdown();
+      closeAdminProfileModal();
+      try {
+        localStorage.removeItem(AUTH_SESSION_KEY);
+      } catch (e) {}
+      fetch("/api/auth/admin", { method: "DELETE" }).catch(() => {});
+      switchWorkspaceMode("admin");
+      const authGate = document.getElementById("authGateScreen");
+      const erpShell = document.getElementById("erpAppShell");
+      if (erpShell) erpShell.style.display = "none";
+      if (authGate) authGate.style.display = "flex";
+      const passInput = document.getElementById("loginAdminPass");
+      if (passInput) passInput.value = "";
+      showToast("Signed out of Operations Management System (Admin Workspace Locked)");
     }
 
     // ========================================================================
@@ -3605,6 +4409,21 @@ const IMG = {
     function switchErpView(viewKey) {
       const aliasMap = { reports: "dashboard", cms: "marketing_cms", hrm: "working_team", expenses_assets: "finance", accounts: "finance" };
       const resolvedKey = aliasMap[viewKey] || viewKey;
+
+      // Strict RBAC Enforcement
+      const activeStaff = getActiveAdminStaffRecord();
+      const lockToggle = document.getElementById("rbacStrictLockToggle");
+      const strictLock = lockToggle ? lockToggle.checked : true;
+      const accesses = (activeStaff && Array.isArray(activeStaff.accesses))
+        ? activeStaff.accesses
+        : (ROLE_DEFAULT_ACCESS_MAP[activeStaff?.role] || ALL_ERP_MODULES);
+
+      const moduleName = VIEW_KEY_TO_MODULE[resolvedKey];
+      if (strictLock && moduleName && !accesses.includes(moduleName)) {
+        showToast(`🔒 Access Restricted: "${activeStaff?.name || 'Staff'}" (${activeStaff?.role || 'Current Role'}) does not have permission for "${moduleName}".`);
+        return;
+      }
+
       document.querySelectorAll(".erp-view").forEach(v => v.classList.remove("active"));
       const target = document.getElementById("view-" + resolvedKey);
       if (target) target.classList.add("active");
@@ -3725,7 +4544,7 @@ const IMG = {
       // Cash Collected vs Pending Courier COD
       const settledPaidOrders = orders.filter(o => o.paymentStatus === "Paid" && o.status !== "Refunded");
       const cashCollectedFromOrders = settledPaidOrders.reduce((s, o) => s + (Number(o.totalRevenue) || 0) - (Number(o.codFee) || 0), 0);
-      const pendingCodOrders = orders.filter(o => o.paymentMethod.includes("COD") && (o.paymentStatus === "Pending" || o.paymentStatus === "Collected") && !["Cancelled", "Delivery Failed", "Returned", "Refunded"].includes(o.status));
+      const pendingCodOrders = orders.filter(o => String(o.paymentMethod || o.paymentStatus || "").includes("COD") && (o.paymentStatus === "Pending" || o.paymentStatus === "Collected") && !["Cancelled", "Delivery Failed", "Returned", "Refunded"].includes(o.status));
       const pendingCodReceivable = pendingCodOrders.reduce((s, o) => s + (Number(o.totalRevenue) || 0), 0);
 
       const completedOutcomes = deliveredOrders.length + failedOrReturned.length;
@@ -3800,6 +4619,9 @@ const IMG = {
       setTxt("navBadgeTeam", `${(ERP_DB.staffMembers || []).length} Staff`);
 
       populateAllDynamicOptionSelects();
+      updateAdminProfileTopbar();
+      renderAdminProfileDropdown();
+      updateSidebarRbacState();
       renderDashboard(m);
       renderProductsMasterTable();
       renderInventoryModule(m);
@@ -4898,7 +5720,7 @@ const IMG = {
       if (newStatus === "Delivered") {
         ord.deliveryAttempts = Math.max(1, Number(ord.deliveryAttempts || 1));
         ord.deliveryOutcome = "Successfully delivered to customer";
-        if (ord.paymentMethod.includes("COD") && ord.paymentStatus === "Pending") {
+        if (String(ord.paymentMethod || "").includes("COD") && ord.paymentStatus === "Pending") {
           ord.paymentStatus = "Collected";
         }
       }
@@ -4931,23 +5753,60 @@ const IMG = {
     function bookCourierForOrder(orderId) {
       const ord = ERP_DB.orders.find(o => o.id === orderId);
       if (!ord) return;
-      const couriers = ["Steadfast Courier", "Pathao Courier", "RedX Logistics", "Paperfly"];
-      const nextCourier = couriers[(couriers.indexOf(ord.courier) + 1) % couriers.length] || "Steadfast Courier";
-      ord.courier = nextCourier;
-      ord.trackingNumber = nextCourier.slice(0, 3).toUpperCase() + "-2027-" + Math.floor(10000 + Math.random() * 89999);
-      ord.dispatchDate = nowTimestamp().slice(0, 10);
-      if (["New", "Confirmed", "Packed"].includes(ord.status)) {
-        ord.status = "Dispatched";
-      }
-      ERP_DB.emsNotifications.unshift({
-        id: "EN-" + Date.now(),
-        time: "Just now",
-        type: "Courier Dispatch",
-        msg: `Order ${ord.id} booked with ${ord.courier} (Tracking: ${ord.trackingNumber}).`
+      const defaultCourier = ord.courier || "Pathao Courier";
+      const defaultTrack = ord.trackingNumber || ("PTH-2027-" + Math.floor(10000 + Math.random() * 89999));
+
+      openModal({
+        title: `🚚 Book Courier Dispatch • Order ${ord.id}`,
+        message: `Generate consignment airway bill (AWB) and assign automated courier API webhook for ${ord.customerName} (${ord.shippingDistrict || "Dhaka"}).`,
+        confirmText: "Confirm Dispatch Booking",
+        customHtml: `
+          <div style="display:flex;flex-direction:column;gap:12px;margin-top:10px;">
+            <div>
+              <label style="font-size:11px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:4px;">Select Delivery Partner</label>
+              <select id="modalCourierName" class="info-edit-input">
+                <option value="Pathao Courier" ${defaultCourier === "Pathao Courier" ? "selected" : ""}>Pathao Courier (Same-Day / Next-Day)</option>
+                <option value="Steadfast Courier" ${defaultCourier === "Steadfast Courier" ? "selected" : ""}>Steadfast Courier (Nationwide Express)</option>
+                <option value="RedX Logistics" ${defaultCourier === "RedX Logistics" ? "selected" : ""}>RedX Logistics (Doorstep COD)</option>
+                <option value="Paperfly" ${defaultCourier === "Paperfly" ? "selected" : ""}>Paperfly (Remote Thana Delivery)</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:11px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:4px;">Airway Bill / Tracking Reference Number</label>
+              <input type="text" id="modalTrackingNum" class="info-edit-input mono" value="${defaultTrack}" placeholder="e.g., PTH-2027-99124" />
+            </div>
+            <div>
+              <label style="font-size:11px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:4px;">Workflow Outcome Status</label>
+              <select id="modalCourierOutcome" class="info-edit-input">
+                <option value="Dispatched" selected>Dispatched (In Transit with Courier)</option>
+                <option value="Ready for Pickup">Ready for Hub Rider Handover</option>
+                <option value="Packed">Packed • Label Printed</option>
+              </select>
+            </div>
+          </div>
+        `,
+        onConfirm: () => {
+          const chosenCourier = document.getElementById("modalCourierName")?.value || defaultCourier;
+          const chosenTrack = document.getElementById("modalTrackingNum")?.value?.trim() || defaultTrack;
+          const chosenOutcome = document.getElementById("modalCourierOutcome")?.value || "Dispatched";
+
+          ord.courier = chosenCourier;
+          ord.trackingNumber = chosenTrack;
+          ord.dispatchDate = nowTimestamp().slice(0, 10);
+          ord.status = chosenOutcome;
+
+          if (!Array.isArray(ERP_DB.emsNotifications)) ERP_DB.emsNotifications = [];
+          ERP_DB.emsNotifications.unshift({
+            id: "EN-" + Date.now(),
+            time: "Just now",
+            type: "Courier Dispatch",
+            msg: `Order ${ord.id} booked with ${ord.courier} (Tracking: ${ord.trackingNumber}). Status set to ${ord.status}.`
+          });
+          saveErpDatabase();
+          renderAllErpModules();
+          showToast(`Booked ${ord.courier} • Tracking: ${ord.trackingNumber}`);
+        }
       });
-      saveErpDatabase();
-      renderAllErpModules();
-      showToast(`Booked ${ord.courier} • Tracking: ${ord.trackingNumber}`);
     }
 
     function renderInvoiceModalHtml(ord, isSampleBadge = false) {
@@ -5329,18 +6188,18 @@ const IMG = {
           return `
             <tr>
               <td>
-                <div style="font-weight:700;">${c.name}</div>
-                <div class="mono" style="font-size:11px;color:var(--text-secondary);">${c.phone}</div>
-                <div style="font-size:10.5px;color:var(--text-muted);">${c.email || ""}</div>
+                <div style="font-weight:700;">${escapeHtmlText(c.name)}</div>
+                <div class="mono" style="font-size:11px;color:var(--text-secondary);">${escapeHtmlText(c.phone)}</div>
+                <div style="font-size:10.5px;color:var(--text-muted);">${escapeHtmlText(c.email || "")}</div>
               </td>
-              <td style="font-size:12px;max-width:190px;">${c.address}</td>
-              <td><span class="badge ${c.tier === 'VIP' ? 'badge-rose' : (c.tier === 'Repeat' ? 'badge-green' : 'badge-blue')}">${c.tier}</span></td>
+              <td style="font-size:12px;max-width:190px;">${escapeHtmlText(c.address)}</td>
+              <td><span class="badge ${c.tier === 'VIP' ? 'badge-rose' : (c.tier === 'Repeat' ? 'badge-green' : 'badge-blue')}">${escapeHtmlText(c.tier)}</span></td>
               <td class="mono">${c.completedOrders || 1} Delivered / ${c.ordersCount || 1} Total</td>
               <td class="mono" style="font-weight:700;">${formatBdt(c.spend)}</td>
               <td class="mono">${c.returnsCount || 0} Ret / ${c.failedCount || 0} Fail</td>
               <td style="font-size:11px;">
-                <div>${c.notes || "No service issues"}</div>
-                <div style="font-size:10.5px;color:var(--status-green);margin-top:2px;">Opt-in: ${consentTags}</div>
+                <div>${escapeHtmlText(c.notes || "No service issues")}</div>
+                <div style="font-size:10.5px;color:var(--status-green);margin-top:2px;">Opt-in: ${escapeHtmlText(consentTags)}</div>
               </td>
               <td>
                 <div style="display:flex;gap:5px;">
@@ -5553,7 +6412,7 @@ const IMG = {
               <div style="display:flex;gap:5px;flex-wrap:wrap;">
                 <button type="button" class="btn btn-sm btn-rose" onclick="loadSupplierForBalanceEntry('${s.id}')">✎ Entry Paid / Due</button>
                 <button type="button" class="btn btn-sm btn-secondary" onclick="paySupplierBalance('${s.id}')">💳 Pay Due / Advance</button>
-                <button type="button" class="btn btn-sm btn-danger" onclick="logSupplierDefectClaim('${s.id}')">+ Defect Claim</button>
+                <button type="button" class="btn btn-sm btn-danger" onclick="logSupplierDefectClaim('${s.id}')">⚠️ Defect Claim</button>
               </div>
             </td>
           </tr>
@@ -5621,7 +6480,8 @@ const IMG = {
       if (document.getElementById("supDueAccount") && sup.dueAccount) document.getElementById("supDueAccount").value = sup.dueAccount;
       if (document.getElementById("supAdvanceStaff") && sup.advanceByStaff) document.getElementById("supAdvanceStaff").value = sup.advanceByStaff;
       if (document.getElementById("supDueStaff") && sup.dueByStaff) document.getElementById("supDueStaff").value = sup.dueByStaff;
-      document.getElementById("supBalanceUpdateMode").value = "SET";
+      const balMode = document.getElementById("supBalanceMode") || document.getElementById("supBalanceUpdateMode");
+      if (balMode) balMode.value = "SET";
       document.getElementById("supAddress").value = sup.address || "";
       document.getElementById("supNotes").value = sup.notes || "";
       const btn = document.getElementById("supFormSubmitBtn");
@@ -5739,10 +6599,34 @@ const IMG = {
     function logSupplierDefectClaim(supId) {
       const sup = ERP_DB.suppliers.find(s => s.id === supId);
       if (!sup) return;
-      sup.defectClaims = `Logged claim on ${nowTimestamp().slice(0, 10)}: 2 defective units flagged for free replacement on next PO`;
-      saveErpDatabase();
-      renderAllErpModules();
-      showToast(`Recorded defect replacement claim against ${sup.name}`);
+      openModal({
+        title: `⚠️ Defect Claim • ${sup.name}`,
+        message: `Log defect claim and replacement requisition for ${sup.name} (${sup.id}). Defective units will be tracked for deduction or free replacement on next procurement batch.`,
+        confirmText: "Submit Defect Claim",
+        customHtml: `
+          <div style="display:flex;flex-direction:column;gap:12px;margin-top:10px;">
+            <div>
+              <label style="font-size:11px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:4px;">Defect Claim Details</label>
+              <textarea id="modalDefectClaimText" class="info-edit-input" style="height:60px;">Logged claim on ${nowTimestamp().slice(0, 10)}: 2 defective units flagged for free replacement on next PO</textarea>
+            </div>
+            <div>
+              <label style="font-size:11px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:4px;">Resolution Mode</label>
+              <select id="modalDefectClaimResolution" class="info-edit-input">
+                <option value="Free Replacement on Next PO" selected>Free Replacement on Next PO</option>
+                <option value="Debit Note / Balance Deduction">Debit Note / Balance Deduction</option>
+                <option value="Supplier Cash Refund">Supplier Cash Refund</option>
+              </select>
+            </div>
+          </div>
+        `,
+        onConfirm: () => {
+          const detail = document.getElementById("modalDefectClaimText")?.value?.trim() || `Logged claim on ${nowTimestamp().slice(0, 10)}: 2 defective units flagged for free replacement on next PO`;
+          sup.defectClaims = detail;
+          saveErpDatabase();
+          renderAllErpModules();
+          showToast(`Recorded defect replacement claim against ${sup.name}`);
+        }
+      });
     }
 
     function notifyPreorderCustomer(preId) {
@@ -5758,7 +6642,8 @@ const IMG = {
       const sh = ERP_DB.shipments.find(x => x.id === shipmentId);
       if (!sh) return;
       document.getElementById("grnShipmentId").value = sh.id;
-      document.getElementById("grnReceivedQty").value = sh.orderedQty;
+      const outstanding = Math.max(0, Number(sh.orderedQty || 0) - Number(sh.receivedQty || 0));
+      document.getElementById("grnReceivedQty").value = outstanding || sh.orderedQty;
       document.getElementById("grnDamagedQty").value = 0;
       document.getElementById("grnWarehouseBin").value = sh.warehouse || "Uttara Sec-12 • Rack A4";
       document.getElementById("grnShipmentSummaryBox").innerHTML = `
@@ -5782,6 +6667,9 @@ const IMG = {
       const ret = Number(document.getElementById("spRetailPrice")?.value) || 0;
       const qty = Number(document.getElementById("spOrderedQty")?.value) || 0;
       const rPct = ret > 0 ? Math.round(((ret - landed) / ret) * 100) : 0;
+      const wPct = cost > 0 ? Math.round(((landed - cost) / cost) * 100) : 0;
+      const wHint = document.getElementById("spWholesaleMarginHint");
+      if (wHint) wHint.textContent = `Landed markup: +${wPct}% (Buy: ৳${cost})`;
       const rHint = document.getElementById("spRetailMarginHint");
       if (rHint) rHint.textContent = `Margin vs Landed: +${rPct}% (Buy: ৳${cost})`;
 
@@ -5791,9 +6679,14 @@ const IMG = {
       if (totalPoEl) {
         const totalPo = qty * landed;
         totalPoEl.value = totalPo;
+        totalPoEl.textContent = String(totalPo);
+        totalPoEl.innerText = String(totalPo);
         if (advEl && dueEl) {
           const adv = Number(advEl.value) || 0;
-          dueEl.value = Math.max(0, totalPo - adv);
+          const dueVal = Math.max(0, totalPo - adv);
+          dueEl.value = dueVal;
+          dueEl.textContent = String(dueVal);
+          dueEl.innerText = String(dueVal);
         }
       }
     }
@@ -5803,7 +6696,10 @@ const IMG = {
       const adv = Number(document.getElementById("spAdvancePaid")?.value) || 0;
       const dueEl = document.getElementById("spPayableDue");
       if (dueEl) {
-        dueEl.value = Math.max(0, totalPo - adv);
+        const dueVal = Math.max(0, totalPo - adv);
+        dueEl.value = dueVal;
+        dueEl.textContent = String(dueVal);
+        dueEl.innerText = String(dueVal);
       }
     }
 
@@ -5848,7 +6744,7 @@ const IMG = {
       if (codBody) {
         codBody.innerHTML = ERP_DB.orders.map(o => {
           const courierCharge = Number(o.courierActualCost || 60);
-          const codFee = o.paymentMethod.includes("COD") ? Number(o.codFee || Math.round(o.totalRevenue * 0.01)) : 0;
+          const codFee = String(o.paymentMethod || "").includes("COD") ? Number(o.codFee || Math.round(o.totalRevenue * 0.01)) : 0;
           const netReceivable = Math.max(0, Number(o.totalRevenue || 0) - courierCharge - codFee);
           return `
             <tr>
@@ -5908,19 +6804,19 @@ const IMG = {
         expBody.innerHTML = (ERP_DB.expenses || []).map(ex => `
           <tr>
             <td>
-              <div class="mono" style="font-weight:700;">${ex.id}</div>
-              <div style="font-size:10.5px;color:var(--text-muted);">${ex.date}</div>
+              <div class="mono" style="font-weight:700;">${escapeHtmlText(ex.id)}</div>
+              <div style="font-size:10.5px;color:var(--text-muted);">${escapeHtmlText(ex.date)}</div>
             </td>
             <td>
-              <div style="font-weight:700;">${ex.title}</div>
-              <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${ex.details || "—"}</div>
+              <div style="font-weight:700;">${escapeHtmlText(ex.title)}</div>
+              <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${escapeHtmlText(ex.details || "—")}</div>
             </td>
-            <td><span class="badge badge-orange">${ex.category}</span></td>
+            <td><span class="badge badge-orange">${escapeHtmlText(ex.category)}</span></td>
             <td>
-              <div style="font-weight:700;font-size:12px;">👤 ${ex.responsibleStaffName || "Nadia Sultana"}</div>
-              <div style="font-size:10.5px;color:var(--text-muted);">${ex.responsibleStaffRole || "Operations"}</div>
+              <div style="font-weight:700;font-size:12px;">👤 ${escapeHtmlText(ex.responsibleStaffName || "Nadia Sultana")}</div>
+              <div style="font-size:10.5px;color:var(--text-muted);">${escapeHtmlText(ex.responsibleStaffRole || "Operations")}</div>
             </td>
-            <td><span class="badge badge-blue">${ERP_DB.accounts[ex.account]?.name || ex.account}</span></td>
+            <td><span class="badge badge-blue">${escapeHtmlText(ERP_DB.accounts[ex.account]?.name || ex.account)}</span></td>
             <td class="mono" style="font-weight:700;color:var(--danger);">${formatBdt(ex.amount)}</td>
           </tr>
         `).join("");
@@ -6057,10 +6953,16 @@ const IMG = {
       renderFooterSectionsCmsManager();
     }
 
-    function toggleCouponStatus(idx) {
-      const c = ERP_DB.coupons[idx];
+    function toggleCouponStatus(idxOrCode) {
+      let c = null;
+      if (typeof idxOrCode === "number") {
+        c = (ERP_DB.coupons || [])[idxOrCode];
+      } else {
+        c = (ERP_DB.coupons || []).find(x => x.code === idxOrCode || String(x.id) === String(idxOrCode));
+      }
       if (!c) return;
       c.active = !c.active;
+      c.status = c.active ? "Active" : "Disabled";
       saveErpDatabase();
       renderAllErpModules();
       showToast(`Coupon ${c.code} is now ${c.active ? 'Active on Storefront' : 'Disabled'}`);
@@ -6530,6 +7432,8 @@ const IMG = {
       document.getElementById("crmEmail").value = c.email || "";
       document.getElementById("crmTier").value = c.tier || "Repeat";
       document.getElementById("crmPoints").value = c.points || 0;
+      const custPtsEl = document.getElementById("crmCustPoints");
+      if (custPtsEl) custPtsEl.value = c.points || 0;
       document.getElementById("crmAddress").value = c.address || "";
       document.getElementById("crmNotes").value = c.notes || "";
       document.getElementById("crmConsentSms").checked = Boolean(c.consent?.sms);
@@ -6846,6 +7750,7 @@ const IMG = {
         uploadedSpImageData = "";
         saveErpDatabase();
         renderAllErpModules();
+        syncErpToStorefront();
         switchProcTab("shipments");
         showToast(`Saved "${title}" (${newPoId}) & updated Supplier Paid (+${formatBdt(advancePaid)}) / Due (+${formatBdt(payableDue)})!`);
       });
@@ -6856,13 +7761,22 @@ const IMG = {
         const shId = document.getElementById("grnShipmentId").value;
         const recQty = Number(document.getElementById("grnReceivedQty").value) || 0;
         const dmgQty = Number(document.getElementById("grnDamagedQty").value) || 0;
-        const publishNow = document.getElementById("grnPublishImmediately").checked;
+        const publishNow = Boolean(
+          (document.getElementById("grnAutoPublishCheck") || document.getElementById("grnPublishImmediately"))?.checked
+        );
 
         const sh = ERP_DB.shipments.find(x => x.id === shId);
         if (!sh) return;
-        sh.receivedQty = recQty;
-        sh.damagedQty = dmgQty;
-        sh.status = "RECEIVED";
+        const prevRec = Number(sh.receivedQty || 0);
+        const newTotalRec = prevRec + recQty;
+        sh.receivedQty = newTotalRec;
+        sh.damagedQty = (Number(sh.damagedQty || 0)) + dmgQty;
+        const outQty = Math.max(0, Number(sh.orderedQty || 0) - newTotalRec);
+        if (outQty <= 0) {
+          sh.status = "RECEIVED";
+        } else {
+          sh.status = "PARTIAL";
+        }
 
         const prod = ERP_DB.products.find(p => p.id === sh.productId || p.sku === sh.sku);
         if (prod) {
@@ -6894,6 +7808,7 @@ const IMG = {
         closeReceiveShipmentModal();
         saveErpDatabase();
         renderAllErpModules();
+        syncErpToStorefront();
         showToast(`Shipment ${sh.id} received (+${recQty} Avail) ${publishNow ? "& Published to Storefront!" : ""}`);
       });
 
@@ -6903,7 +7818,7 @@ const IMG = {
         const editSupId = document.getElementById("supEditSelect")?.value || "";
         const paidInputVal = Math.max(0, Number(document.getElementById("supPaidAmount")?.value) || 0);
         const dueInputVal = Math.max(0, Number(document.getElementById("supPayableAmount")?.value) || 0);
-        const updateMode = document.getElementById("supBalanceUpdateMode")?.value || "SET";
+        const updateMode = (document.getElementById("supBalanceMode") || document.getElementById("supBalanceUpdateMode"))?.value || "SET";
 
         const advAccount = document.getElementById("supAdvanceAccount")?.value || "acc_bkash";
         const advStaff = document.getElementById("supAdvanceStaff")?.value || "Nadia Sultana";
@@ -7295,7 +8210,7 @@ const IMG = {
         const phone = document.getElementById("crmPhone").value.trim();
         const email = document.getElementById("crmEmail").value.trim();
         const tier = document.getElementById("crmTier").value;
-        const points = Number(document.getElementById("crmPoints").value) || 250;
+        const points = Number((document.getElementById("crmCustPoints") || document.getElementById("crmPoints"))?.value) || 250;
         const address = document.getElementById("crmAddress").value.trim();
         const notes = document.getElementById("crmNotes").value.trim();
         const consent = {
@@ -7329,6 +8244,10 @@ const IMG = {
           };
           ERP_DB.crmCustomers.unshift(newCust);
           showToast(`Added Customer "${newCust.name}" to CRM`);
+        }
+        if (state.profile && (state.profile.phone === phone || state.profile.email === email)) {
+          state.profile.points = points;
+          if (typeof updateAccountUi === "function") updateAccountUi();
         }
         if (document.getElementById("crmEditCustId")) document.getElementById("crmEditCustId").value = "";
         e.target.reset();
@@ -7654,6 +8573,80 @@ const IMG = {
         renderAllErpModules();
         showToast(`Recorded ${payType} (${formatBdt(amount)}) — Adv: ${advStaff} • Due: ${dueStaff}`);
       });
+
+      // Bind Topbar Admin Profile dropdown trigger & outside click
+      const profileBtn = document.getElementById("erpAdminProfileBtn");
+      if (profileBtn) {
+        profileBtn.addEventListener("click", e => {
+          e.stopPropagation();
+          toggleAdminProfileDropdown();
+        });
+      }
+
+      document.addEventListener("click", e => {
+        const wrap = document.querySelector(".erp-admin-profile-wrap");
+        if (wrap && !wrap.contains(e.target)) {
+          closeAdminProfileDropdown();
+        }
+      });
+
+      // Strict RBAC Lock Toggle change
+      const rbacToggle = document.getElementById("rbacStrictLockToggle");
+      if (rbacToggle) {
+        rbacToggle.addEventListener("change", () => {
+          updateSidebarRbacState();
+          showToast(rbacToggle.checked ? "🔒 Strict Role-Based Sidebar Lock Enabled" : "🔓 Sidebar Lock Disabled (Open Navigation)");
+        });
+      }
+
+      // Admin Profile Settings Modal Form Submit
+      const apForm = document.getElementById("adminProfileEditForm");
+      if (apForm) {
+        apForm.addEventListener("submit", saveAdminProfileModalForm);
+      }
+
+      // Quick Action Footer Buttons inside Admin Profile Dropdown
+      const ddEditProfile = document.getElementById("ddEditProfileBtn");
+      if (ddEditProfile) {
+        ddEditProfile.addEventListener("click", () => {
+          const activeStaff = getActiveAdminStaffRecord();
+          openAdminProfileModal(activeStaff ? activeStaff.id : "STF-101");
+        });
+      }
+      const ddMyLedger = document.getElementById("ddMyLedgerBtn");
+      if (ddMyLedger) {
+        ddMyLedger.addEventListener("click", () => {
+          closeAdminProfileDropdown();
+          const activeStaff = getActiveAdminStaffRecord();
+          switchErpView("working_team");
+          switchWtTab("expenses");
+          if (activeStaff) filterTeamReportByStaff(activeStaff.name);
+        });
+      }
+      const ddManageStaff = document.getElementById("ddManageStaffBtn");
+      if (ddManageStaff) {
+        ddManageStaff.addEventListener("click", () => {
+          closeAdminProfileDropdown();
+          switchErpView("working_team");
+          switchWtTab("staff");
+        });
+      }
+
+      // When wtStaffRole changes in workingTeamStaffForm, auto-preset default checkboxes if creating new staff
+      const wtRoleEl = document.getElementById("wtStaffRole");
+      if (wtRoleEl) {
+        wtRoleEl.addEventListener("change", e => {
+          const editId = document.getElementById("wtStaffEditId")?.value || "";
+          if (!editId) {
+            const role = e.target.value;
+            const defaults = ROLE_DEFAULT_ACCESS_MAP[role] || [];
+            const accSet = new Set(defaults);
+            document.querySelectorAll("#wtAccessCheckboxes input[type='checkbox']").forEach(cb => {
+              cb.checked = accSet.has(cb.value);
+            });
+          }
+        });
+      }
     }
 
     // ========================================================================
@@ -8090,37 +9083,53 @@ const IMG = {
       }
 
       // 1. Render Staff Directory Table
-      const staffBody = document.getElementById("workingTeamStaffTableBody");
+      const staffBody = document.getElementById("wtStaffTableBody") || document.getElementById("workingTeamStaffTableBody");
+      const activeStaff = getActiveAdminStaffRecord();
       if (staffBody) {
         staffBody.innerHTML = staffList.map(st => {
-          const stExps = expenses.filter(e => e.responsibleStaffName === st.name);
+          const isActiveAdmin = (st.id === activeStaff?.id);
+          const stExps = expenses.filter(e => e.responsibleStaffName === st.name || e.responsibleStaffId === st.id || e.staff === st.name || e.createdBy === st.name);
           const stExpTotal = stExps.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-          const stAdvTotal = payments.filter(p => p.advanceByStaff === st.name && p.paymentType === "Advance Payment").reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-          const stDueTotal = payments.filter(p => p.dueByStaff === st.name && p.paymentType === "Due Payment").reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-          const accessPills = (st.accesses || []).map(a => `<span class="badge badge-blue" style="font-size:9.5px;margin:1px;">${a}</span>`).join(" ");
+          const stAdvTotal = payments.filter(p => (p.advanceByStaff === st.name || p.staff === st.name) && p.paymentType === "Advance Payment").reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+          const stDueTotal = payments.filter(p => (p.dueByStaff === st.name || p.staff === st.name) && p.paymentType === "Due Payment").reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+          const accessPills = (st.accesses || ROLE_DEFAULT_ACCESS_MAP[st.role] || ALL_ERP_MODULES).map(a => `<span class="badge badge-blue" style="font-size:9.5px;margin:1px;">${escapeHtmlText(a)}</span>`).join(" ");
           return `
-            <tr>
+            <tr class="${isActiveAdmin ? 'active-admin-row' : ''}">
               <td>
-                <div style="font-weight:700;">${st.name}</div>
-                <div class="mono" style="font-size:10.5px;color:var(--accent-rose-deep);">${st.id} • ${st.phone}</div>
-                <div class="mono" style="font-size:10px;color:var(--text-muted);">${st.email}</div>
+                <div style="display:flex;align-items:center;gap:10px;">
+                  <div class="erp-dd-avatar-circle" style="width:34px;height:34px;font-size:12px;flex-shrink:0;">${st.avatar || "ST"}</div>
+                  <div>
+                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                      <strong style="font-size:13px;">${escapeHtmlText(st.name)}</strong>
+                      ${isActiveAdmin ? `<span class="badge badge-green" style="font-size:9.5px;padding:1px 6px;">● Logged-In Admin</span>` : ''}
+                    </div>
+                    <div class="mono" style="font-size:11px;color:var(--accent-rose-deep);">${st.id} • ${escapeHtmlText(st.phone)}</div>
+                    <div class="mono" style="font-size:10px;color:var(--text-muted);">${escapeHtmlText(st.email)}</div>
+                  </div>
+                </div>
               </td>
               <td>
-                <span class="badge badge-rose">${st.role}</span>
-                <div style="font-size:10.5px;color:var(--text-muted);margin-top:3px;">Dept: ${st.dept || "Operations"}</div>
+                <span class="badge badge-rose">${escapeHtmlText(st.role)}</span>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">Dept: ${escapeHtmlText(st.dept || "Operations")}</div>
+                <div style="font-size:10.5px;color:var(--text-secondary);margin-top:2px;">Shift: ${escapeHtmlText(st.shift || "09:00 AM – 06:00 PM")}</div>
               </td>
               <td style="max-width:260px;">${accessPills}</td>
               <td class="mono">
                 <div style="font-weight:700;color:var(--danger);">${formatBdt(stExpTotal)}</div>
-                <div style="font-size:10px;color:var(--text-muted);">${stExps.length} expense(s)</div>
+                <div style="font-size:10px;color:var(--text-muted);">${stExps.length} voucher(s)</div>
               </td>
               <td class="mono" style="font-weight:700;color:var(--status-green);">${formatBdt(stAdvTotal)}</td>
               <td class="mono" style="font-weight:700;color:var(--accent-rose-deep);">${formatBdt(stDueTotal)}</td>
               <td>
                 <span class="badge ${st.status === 'Active' ? 'badge-green' : 'badge-orange'}">${st.status || 'Active'}</span>
                 <div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap;">
-                  <button type="button" class="btn btn-sm btn-secondary" onclick="editWorkingTeamStaff('${st.id}')">✎ Edit Role/Access</button>
-                  <button type="button" class="btn btn-sm btn-rose" onclick="filterTeamReportByStaff('${st.name}')">📊 Reports</button>
+                  ${isActiveAdmin ?
+                    `<button type="button" class="btn btn-xs btn-secondary" disabled style="opacity:0.65;">✓ Active Profile</button>` :
+                    `<button type="button" class="btn btn-xs btn-primary" onclick="switchActiveErpStaffProfile('${st.id}')">🔑 Switch Profile</button>`
+                  }
+                  <button type="button" class="btn btn-xs btn-secondary" onclick="openAdminProfileModal('${st.id}')">⚙ Admin Profile</button>
+                  <button type="button" class="btn btn-xs btn-secondary" onclick="editWorkingTeamStaff('${st.id}')">✎ Edit</button>
+                  <button type="button" class="btn btn-xs btn-secondary" onclick="filterTeamReportByStaff('${escapeHtmlText(st.name)}')">📊 Reports</button>
                 </div>
               </td>
             </tr>
@@ -8449,6 +9458,8 @@ const IMG = {
           gallery: (Array.isArray(p.gallery) && p.gallery.length) ? p.gallery : [imgUrl, IMG.clothing_set, IMG.necklace, IMG.cream_bag]
         };
       });
+      window.PRODUCTS = PRODUCTS;
+      window.PRODUCTS_DATA = PRODUCTS;
 
       if (ERP_DB.cms && Array.isArray(ERP_DB.cms.categories)) {
         const defaultImgMap = { "Clothing": "silk_blouse", "Shoes": "heels", "Fashion": "cream_bag", "Accessories": "necklace", "Mom & Kids": "mom_kids", "Gifts & Seasonal": "giftbox" };
@@ -10516,6 +11527,49 @@ const IMG = {
         switchWorkspaceMode("admin");
       }
     } catch (e) {}
+
+    window.switchScreen = switchScreen;
+    window.openPDP = (pid) => switchScreen("product", { productId: pid });
+    window.renderAll = renderAll;
+    window.syncErpToStorefront = syncErpToStorefront;
+    window.state = state;
+    window.editCrmCustomer = loadCustomerIntoCrmForm;
+    window.loadCustomerIntoCrmForm = loadCustomerIntoCrmForm;
+    window.toggleReviewStatus = toggleReviewApproval;
+    window.awardBonusPoints = awardBonusPoints;
+    window.reconcileSingleOrderCod = reconcileSingleOrderCod;
+    window.settleAllCollectedCod = settleAllCollectedCod;
+    window.toggleCouponStatus = toggleCouponStatus;
+    window.editFooterSectionColumn = editFooterSectionColumn;
+    window.resetFooterSectionColForm = resetFooterSectionColForm;
+    window.deleteFooterSectionColumn = deleteFooterSectionColumn;
+    window.prepareNewFooterItemInSection = prepareNewFooterItemInSection;
+    window.toggleFooterItemTypeFields = toggleFooterItemTypeFields;
+    window.editFooterLinkItem = editFooterLinkItem;
+    window.previewFooterInfoPopup = previewFooterInfoPopup;
+    window.deleteFooterLinkItem = deleteFooterLinkItem;
+    window.triggerMultiChannelSync = triggerMultiChannelSync;
+    window.editWorkingTeamStaff = editWorkingTeamStaff;
+    window.resetWorkingTeamStaffForm = resetWorkingTeamStaffForm;
+    window.filterTeamReportByStaff = filterTeamReportByStaff;
+    window.resetDefaultBrandLogos = resetDefaultBrandLogos;
+    window.loadSlideIntoEditor = loadSlideIntoEditor;
+    window.deleteHeroSlide = deleteHeroSlide;
+    window.openCreateCustomOptionModal = openCreateCustomOptionModal;
+    window.handleDynamicSelectAddNew = handleDynamicSelectAddNew;
+    window.lockErpWorkspace = lockErpWorkspace;
+    window.switchActiveErpStaffProfile = switchActiveErpStaffProfile;
+    window.openAdminProfileModal = openAdminProfileModal;
+    window.closeAdminProfileModal = closeAdminProfileModal;
+    window.setAllModalProfileAccesses = setAllModalProfileAccesses;
+    window.applyDefaultRoleAccessesInModal = applyDefaultRoleAccessesInModal;
+    window.toggleAdminProfileDropdown = toggleAdminProfileDropdown;
+    window.closeAdminProfileDropdown = closeAdminProfileDropdown;
+    window.updateSidebarRbacState = updateSidebarRbacState;
+    window.saveAdminProfileModalForm = saveAdminProfileModalForm;
+    window.ROLE_DEFAULT_ACCESS_MAP = ROLE_DEFAULT_ACCESS_MAP;
+    window.OPERATIONAL_ROLES = OPERATIONAL_ROLES;
+    window.ALL_ERP_MODULES = ALL_ERP_MODULES;
 
     window.__tehzibRuntimeReady = true;
 
