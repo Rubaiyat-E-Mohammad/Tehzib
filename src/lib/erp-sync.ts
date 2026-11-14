@@ -459,31 +459,39 @@ export async function buildHydratedPlatformState() {
     active: c.active,
   }));
 
-  const erpStaffMembers = staffMembers.map((st) => ({
-    id: st.code,
-    name: st.name,
-    phone: st.phone || "",
-    email: st.email,
-    role: st.role.name,
-    dept: st.dept || "Operations",
-    status: st.status === StaffStatus.ACTIVE ? "Active" : "Inactive",
-    accesses: st.permissions.includes("*")
-      ? Object.keys(LEGACY_ACCESS_LABELS)
-      : st.permissions.map((k) => moduleLabel(k)),
-  }));
+  const erpStaffMembers = staffMembers.map((st) => {
+    const cleanCode = st.code && !/^stf-/i.test(st.code) && !/^staff_/i.test(st.code) ? st.code : "";
+    return {
+      id: st.id,
+      staffId: cleanCode,
+      name: st.name,
+      phone: st.phone || "",
+      email: st.email,
+      role: st.role.name,
+      dept: st.dept || "Operations",
+      status: st.status === StaffStatus.ACTIVE ? "Active" : "Inactive",
+      accesses: st.permissions.includes("*")
+        ? Object.keys(LEGACY_ACCESS_LABELS)
+        : st.permissions.map((k) => moduleLabel(k)),
+    };
+  });
 
-  const erpExpenses = expenses.map((ex) => ({
-    id: ex.number,
-    date: fmtDateStr(ex.date, false),
-    title: ex.title,
-    details: ex.details || ex.title,
-    category: ex.category,
-    account: ex.accountId || "acc_cash",
-    responsibleStaffId: ex.staff?.code || "STF-101",
-    responsibleStaffName: ex.staff?.name || "Tahmid Alvi",
-    responsibleStaffRole: ex.staff?.role.name || "Founder & Store Owner (Full Access)",
-    amount: ex.amount,
-  }));
+  const erpExpenses = expenses.map((ex) => {
+    const rawCode = ex.staff?.code || "";
+    const cleanStaffCode = rawCode && !/^stf-/i.test(rawCode) ? rawCode : (ex.staff?.id || "staff_tahmid");
+    return {
+      id: ex.number,
+      date: fmtDateStr(ex.date, false),
+      title: ex.title,
+      details: ex.details || ex.title,
+      category: ex.category,
+      account: ex.accountId || "acc_cash",
+      responsibleStaffId: cleanStaffCode,
+      responsibleStaffName: ex.staff?.name || "Tahmid Alvi",
+      responsibleStaffRole: ex.staff?.role.name || "Founder & Store Owner",
+      amount: ex.amount,
+    };
+  });
 
   const erpPaymentsLog = paymentsLog.map((pl) => ({
     id: pl.number,
@@ -1358,11 +1366,21 @@ export async function persistPlatformStateToPostgres(payload: {
           const perms = Array.isArray(st.accesses)
             ? st.accesses.map((a: string) => LEGACY_ACCESS_LABELS[a] || a)
             : ["dashboard"];
-          const existingSt = await tx.staff.findUnique({ where: { code: st.id } });
+          const customCode = st.staffId && String(st.staffId).trim() ? String(st.staffId).trim() : st.id;
+          const existingSt = await tx.staff.findFirst({
+            where: {
+              OR: [
+                { id: st.id },
+                { code: customCode },
+                { email: st.email },
+              ],
+            },
+          });
           if (existingSt) {
             await tx.staff.update({
               where: { id: existingSt.id },
               data: {
+                code: customCode,
                 name: st.name,
                 phone: st.phone || "",
                 email: st.email,
@@ -1376,7 +1394,7 @@ export async function persistPlatformStateToPostgres(payload: {
             await tx.staff.create({
               data: {
                 id: st.id,
-                code: st.id,
+                code: customCode,
                 name: st.name,
                 phone: st.phone || "",
                 email: st.email || `${st.id.toLowerCase()}@tehzib.com`,

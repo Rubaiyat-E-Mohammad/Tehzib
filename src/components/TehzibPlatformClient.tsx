@@ -31,7 +31,7 @@ declare global {
   }
 }
 
-const RUNTIME_VERSION = "57";
+const RUNTIME_VERSION = "66";
 const STATIC_MARKUP = { __html: PLATFORM_HTML_MARKUP };
 
 /**
@@ -70,6 +70,7 @@ export function TehzibPlatformClient({
       return json.data;
     },
     initialData,
+    refetchOnWindowFocus: false,
   });
 
   // TanStack Query mutation for persisting Storefront & ERP changes to PostgreSQL
@@ -93,6 +94,9 @@ export function TehzibPlatformClient({
       }
     },
   });
+
+  const persistMutateRef = useRef(persistMutation.mutate);
+  persistMutateRef.current = persistMutation.mutate;
 
   useEffect(() => {
     window.__TEHZIB_INITIAL_SERVER_STATE__ = initialData;
@@ -119,7 +123,7 @@ export function TehzibPlatformClient({
     window.__tehzibScheduleServerSync = (payload) => {
       if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
       syncTimerRef.current = setTimeout(() => {
-        persistMutation.mutate(payload);
+        persistMutateRef.current(payload);
       }, 250);
     };
 
@@ -138,14 +142,18 @@ export function TehzibPlatformClient({
       script.src = `/tehzib-runtime.js?v=${RUNTIME_VERSION}`;
       script.async = false;
       document.body.appendChild(script);
-    } else if (typeof (window as any).switchWorkspaceMode === "function") {
+    } else if (
+      typeof (window as any).switchWorkspaceMode === "function" &&
+      (window as any).state?.appMode !== initialMode
+    ) {
       (window as any).switchWorkspaceMode(initialMode);
     }
 
     return () => {
       if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
     };
-  }, [initialData, initialMode, persistMutation]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialMode]);
 
   return <TehzibStaticDomShell initialMode={initialMode} />;
 }

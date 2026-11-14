@@ -1789,13 +1789,13 @@ const SEED_DATA = {
     "admin@tehzib.com": {
       "pass": "Tehzib@2027",
       "name": "Founder & Store Owner",
-      "role": "Founder & Store Owner (Full Access)",
+      "role": "Founder & Store Owner",
       "avatar": "TA"
     },
     "tehzib-admin": {
       "pass": "Tehzib@2027",
       "name": "Tehzib Master Admin",
-      "role": "Founder & Store Owner (Full Access)",
+      "role": "Founder & Store Owner",
       "avatar": "TA"
     },
     "ops@tehzib.com": {
@@ -3284,7 +3284,7 @@ const SEED_DATA = {
     ],
     "staffRoles": [
       "Finance & Accounts Controller",
-      "Founder & Store Owner (Full Access)",
+      "Founder & Store Owner",
       "Inventory & Warehouse Lead",
       "Marketing, Merchandising & CMS",
       "Order Fulfillment & Courier Ops",
@@ -3292,11 +3292,12 @@ const SEED_DATA = {
     ],
     "staffMembers": [
       {
-        "id": "STF-101",
+        "id": "staff_tahmid",
+        "staffId": "",
         "name": "Tahmid Alvi",
         "phone": "+880 1711-889900",
         "email": "admin@tehzib.com",
-        "role": "Founder & Store Owner (Full Access)",
+        "role": "Founder & Store Owner",
         "dept": "Executive & Strategy",
         "shift": "Full-Time Executive (Uttara HQ)",
         "avatar": "TA",
@@ -3314,7 +3315,8 @@ const SEED_DATA = {
         ]
       },
       {
-        "id": "STF-102",
+        "id": "staff_farhan",
+        "staffId": "",
         "name": "Farhan Islam",
         "phone": "+880 1819-223311",
         "email": "finance@tehzib.com",
@@ -3332,7 +3334,8 @@ const SEED_DATA = {
         ]
       },
       {
-        "id": "STF-103",
+        "id": "staff_nadia",
+        "staffId": "",
         "name": "Nadia Sultana",
         "phone": "+880 1912-445588",
         "email": "procurement@tehzib.com",
@@ -3350,7 +3353,8 @@ const SEED_DATA = {
         ]
       },
       {
-        "id": "STF-104",
+        "id": "staff_rafiqul",
+        "staffId": "",
         "name": "Rafiqul Hasan",
         "phone": "+880 1718-554433",
         "email": "inventory@tehzib.com",
@@ -3368,7 +3372,8 @@ const SEED_DATA = {
         ]
       },
       {
-        "id": "STF-105",
+        "id": "staff_tanvir",
+        "staffId": "",
         "name": "Tanvir Hossain",
         "phone": "+880 1611-778844",
         "email": "ops@tehzib.com",
@@ -3386,7 +3391,8 @@ const SEED_DATA = {
         ]
       },
       {
-        "id": "STF-106",
+        "id": "staff_lamia",
+        "staffId": "",
         "name": "Lamia Chowdhury",
         "phone": "+880 1715-664422",
         "email": "cms@tehzib.com",
@@ -3412,7 +3418,7 @@ const SEED_DATA = {
         "details": "300 matte blush magnetic gift boxes with gold foil Tehzib logo + satin ribbons from Uttara Packaging Press (Inv #UP-882)",
         "category": "Packaging & Unboxing",
         "account": "acc_bkash",
-        "responsibleStaffId": "STF-103",
+        "responsibleStaffId": "staff_nadia",
         "responsibleStaffName": "Nadia Sultana",
         "responsibleStaffRole": "Procurement & Supplier Manager",
         "amount": 4200
@@ -3424,7 +3430,7 @@ const SEED_DATA = {
         "details": "7-day conversion ad boost targeting Dhaka, Gulshan, Banani, Uttara & Dhanmondi shoppers for Trendsetters collection",
         "category": "Advertising & Boosts",
         "account": "acc_bank",
-        "responsibleStaffId": "STF-105",
+        "responsibleStaffId": "staff_lamia",
         "responsibleStaffName": "Lamia Chowdhury",
         "responsibleStaffRole": "Marketing, Merchandising & CMS",
         "amount": 5500
@@ -3436,7 +3442,7 @@ const SEED_DATA = {
         "details": "Covered van pickup for 3 cartons of claw clips and quilted crossbody bags to Uttara Sector 12 Hub",
         "category": "Transport & Local Sourcing",
         "account": "acc_cash",
-        "responsibleStaffId": "STF-104",
+        "responsibleStaffId": "staff_tanvir",
         "responsibleStaffName": "Tanvir Hossain",
         "responsibleStaffRole": "Order Fulfillment & Courier Ops",
         "amount": 1150
@@ -3448,7 +3454,7 @@ const SEED_DATA = {
         "details": "5 rolls heavy-duty bubble wrap and 1,000 waterproof courier flyers for Steadfast & Pathao dispatch",
         "category": "Packaging & Unboxing",
         "account": "acc_cash",
-        "responsibleStaffId": "STF-104",
+        "responsibleStaffId": "staff_tanvir",
         "responsibleStaffName": "Tanvir Hossain",
         "responsibleStaffRole": "Order Fulfillment & Courier Ops",
         "amount": 950

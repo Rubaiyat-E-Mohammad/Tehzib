@@ -6298,7 +6298,8 @@
 #platformModeBar,
 .platform-mode-bar,
 .auth-credentials-card,
-#erpToast {
+#erpToast,
+#adminSignOutBtn {
   display: none !important;
 }
 
@@ -7332,6 +7333,22 @@ input[type="checkbox"]::before {
   grid-template-columns: 1fr 1fr;
   gap: 8px;
   background: var(--bg-card);
+}
+
+#ddSignOutBtn {
+  transition: none !important;
+}
+
+#ddSignOutBtn:hover,
+#ddSignOutBtn:active,
+#ddSignOutBtn:focus {
+  background: var(--accent-rose) !important;
+  color: #181214 !important;
+  transform: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+  opacity: 1 !important;
+  outline: none !important;
 }
 
 .erp-nav-btn.rbac-locked {

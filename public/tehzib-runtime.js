@@ -1320,6 +1320,7 @@ const IMG = {
     }
 
     function switchWorkspaceMode(mode, targetErpSection = "") {
+      const modeChanged = state.appMode !== mode;
       state.appMode = mode;
       const storeHeader = document.querySelector(".site-header");
       const storeMain = document.querySelector(".app-main");
@@ -1360,6 +1361,7 @@ const IMG = {
           if (authGate) authGate.style.display = "flex";
         }
       } else {
+        document.title = "Tehzib — Contemporary Fashion, Shoes, Bags & Lifestyle";
         if (authGate) authGate.style.display = "none";
         if (erpShell) erpShell.style.display = "none";
         if (storeHeader) storeHeader.style.display = "";
@@ -1369,7 +1371,9 @@ const IMG = {
         syncErpToStorefront();
         renderAll();
       }
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      if (modeChanged) {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
     }
 
     document.getElementById("switchStorefrontModeBtn")?.addEventListener("click", () => switchWorkspaceMode("storefront"));
@@ -2740,7 +2744,7 @@ const IMG = {
     };
 
     const ROLE_DEFAULT_ACCESS_MAP = {
-      "Founder & Store Owner (Full Access)": [
+      "Founder & Store Owner": [
         "Dashboard & BI",
         "Product & Catalogue",
         "Inventory & Stock",
@@ -2790,7 +2794,7 @@ const IMG = {
 
     const OPERATIONAL_ROLES = [
       "Finance & Accounts Controller",
-      "Founder & Store Owner (Full Access)",
+      "Founder & Store Owner",
       "Inventory & Warehouse Lead",
       "Marketing, Merchandising & CMS",
       "Order Fulfillment & Courier Ops",
@@ -2799,11 +2803,12 @@ const IMG = {
 
     const SEED_STAFF_MEMBERS = [
       {
-        id: "STF-101",
+        id: "staff_tahmid",
+        staffId: "",
         name: "Tahmid Alvi",
         email: "admin@tehzib.com",
         phone: "+880 1711-889900",
-        role: "Founder & Store Owner (Full Access)",
+        role: "Founder & Store Owner",
         dept: "Executive & Strategy",
         shift: "Full-Time Executive (Uttara HQ)",
         avatar: "TA",
@@ -2821,7 +2826,8 @@ const IMG = {
         ]
       },
       {
-        id: "STF-102",
+        id: "staff_farhan",
+        staffId: "",
         name: "Farhan Islam",
         email: "finance@tehzib.com",
         phone: "+880 1819-223311",
@@ -2839,7 +2845,8 @@ const IMG = {
         ]
       },
       {
-        id: "STF-103",
+        id: "staff_nadia",
+        staffId: "",
         name: "Nadia Sultana",
         email: "procurement@tehzib.com",
         phone: "+880 1912-445588",
@@ -2857,7 +2864,8 @@ const IMG = {
         ]
       },
       {
-        id: "STF-104",
+        id: "staff_rafiqul",
+        staffId: "",
         name: "Rafiqul Hasan",
         email: "inventory@tehzib.com",
         phone: "+880 1718-554433",
@@ -2875,7 +2883,8 @@ const IMG = {
         ]
       },
       {
-        id: "STF-105",
+        id: "staff_tanvir",
+        staffId: "",
         name: "Tanvir Hossain",
         email: "ops@tehzib.com",
         phone: "+880 1611-778844",
@@ -2893,7 +2902,8 @@ const IMG = {
         ]
       },
       {
-        id: "STF-106",
+        id: "staff_lamia",
+        staffId: "",
         name: "Lamia Chowdhury",
         email: "cms@tehzib.com",
         phone: "+880 1715-664422",
@@ -2913,8 +2923,8 @@ const IMG = {
     ];
 
     const AUTHORIZED_ADMINS = {
-      "admin@tehzib.com": { pass: "Tehzib@2027", name: "Tahmid Alvi", role: "Founder & Store Owner (Full Access)", avatar: "TA" },
-      "tehzib-admin": { pass: "Tehzib@2027", name: "Tahmid Alvi", role: "Founder & Store Owner (Full Access)", avatar: "TA" },
+      "admin@tehzib.com": { pass: "Tehzib@2027", name: "Tahmid Alvi", role: "Founder & Store Owner", avatar: "TA" },
+      "tehzib-admin": { pass: "Tehzib@2027", name: "Tahmid Alvi", role: "Founder & Store Owner", avatar: "TA" },
       "finance@tehzib.com": { pass: "Tehzib@2027", name: "Farhan Islam", role: "Finance & Accounts Controller", avatar: "FI" },
       "procurement@tehzib.com": { pass: "Tehzib@2027", name: "Nadia Sultana", role: "Procurement & Supplier Manager", avatar: "NS" },
       "inventory@tehzib.com": { pass: "Tehzib@2027", name: "Rafiqul Hasan", role: "Inventory & Warehouse Lead", avatar: "RH" },
@@ -3494,10 +3504,10 @@ const IMG = {
         staffMembers: JSON.parse(JSON.stringify(SEED_STAFF_MEMBERS)),
 
         expenses: [
-          { id: "EXP-301", date: "2027-02-08", title: "Custom Blush Foil Gift Boxes, Tissue & Satin Ribbon (300 sets)", details: "300 matte blush magnetic gift boxes with gold foil Tehzib logo + satin ribbons from Uttara Packaging Press (Inv #UP-882)", category: "Packaging & Unboxing", account: "acc_bkash", responsibleStaffId: "STF-103", responsibleStaffName: "Nadia Sultana", responsibleStaffRole: "Procurement & Supplier Manager", amount: 4200 },
-          { id: "EXP-302", date: "2027-02-15", title: "Meta & Instagram Sponsored Carousel Campaign (Claw Clips & Bags)", details: "7-day conversion ad boost targeting Dhaka, Gulshan, Banani, Uttara & Dhanmondi shoppers for Trendsetters collection", category: "Advertising & Boosts", account: "acc_bank", responsibleStaffId: "STF-106", responsibleStaffName: "Lamia Chowdhury", responsibleStaffRole: "Marketing, Merchandising & CMS", amount: 5500 },
-          { id: "EXP-303", date: "2027-02-19", title: "Local Van & Rickshaw Transport from Chawkbazar / Banani Suppliers", details: "Covered van pickup for 3 cartons of claw clips and quilted crossbody bags to Uttara Sector 12 Hub", category: "Transport & Local Sourcing", account: "acc_cash", responsibleStaffId: "STF-105", responsibleStaffName: "Tanvir Hossain", responsibleStaffRole: "Order Fulfillment & Courier Ops", amount: 1150 },
-          { id: "EXP-304", date: "2027-02-24", title: "Bubble Wrap, Poly Mailers & Thermal Barcode Labels", details: "5 rolls heavy-duty bubble wrap and 1,000 waterproof courier flyers for Steadfast & Pathao dispatch", category: "Packaging & Unboxing", account: "acc_cash", responsibleStaffId: "STF-105", responsibleStaffName: "Tanvir Hossain", responsibleStaffRole: "Order Fulfillment & Courier Ops", amount: 950 }
+          { id: "EXP-301", date: "2027-02-08", title: "Custom Blush Foil Gift Boxes, Tissue & Satin Ribbon (300 sets)", details: "300 matte blush magnetic gift boxes with gold foil Tehzib logo + satin ribbons from Uttara Packaging Press (Inv #UP-882)", category: "Packaging & Unboxing", account: "acc_bkash", responsibleStaffId: "staff_nadia", responsibleStaffName: "Nadia Sultana", responsibleStaffRole: "Procurement & Supplier Manager", amount: 4200 },
+          { id: "EXP-302", date: "2027-02-15", title: "Meta & Instagram Sponsored Carousel Campaign (Claw Clips & Bags)", details: "7-day conversion ad boost targeting Dhaka, Gulshan, Banani, Uttara & Dhanmondi shoppers for Trendsetters collection", category: "Advertising & Boosts", account: "acc_bank", responsibleStaffId: "staff_lamia", responsibleStaffName: "Lamia Chowdhury", responsibleStaffRole: "Marketing, Merchandising & CMS", amount: 5500 },
+          { id: "EXP-303", date: "2027-02-19", title: "Local Van & Rickshaw Transport from Chawkbazar / Banani Suppliers", details: "Covered van pickup for 3 cartons of claw clips and quilted crossbody bags to Uttara Sector 12 Hub", category: "Transport & Local Sourcing", account: "acc_cash", responsibleStaffId: "staff_tanvir", responsibleStaffName: "Tanvir Hossain", responsibleStaffRole: "Order Fulfillment & Courier Ops", amount: 1150 },
+          { id: "EXP-304", date: "2027-02-24", title: "Bubble Wrap, Poly Mailers & Thermal Barcode Labels", details: "5 rolls heavy-duty bubble wrap and 1,000 waterproof courier flyers for Steadfast & Pathao dispatch", category: "Packaging & Unboxing", account: "acc_cash", responsibleStaffId: "staff_tanvir", responsibleStaffName: "Tanvir Hossain", responsibleStaffRole: "Order Fulfillment & Courier Ops", amount: 950 }
         ],
 
         paymentsLog: [
@@ -3636,23 +3646,51 @@ const IMG = {
       window.ERP_DB = ERP_DB;
     }
 
+    function getCleanStaffId(st) {
+      if (!st) return "";
+      const val = String(st.staffId !== undefined ? st.staffId : "").trim();
+      if (val && !/^stf-/i.test(val)) return val;
+      const fallback = String(st.id || "").trim();
+      if (fallback && !/^stf-/i.test(fallback) && !/^staff_/i.test(fallback)) return fallback;
+      return "";
+    }
+
     function ensureSixStaffAndRoles(db) {
       if (!db) return;
       db.staffRoles = [...OPERATIONAL_ROLES];
       if (!Array.isArray(db.staffMembers) || db.staffMembers.length === 0) {
         db.staffMembers = JSON.parse(JSON.stringify(SEED_STAFF_MEMBERS));
       } else {
-        // Guarantee all 6 operational staff members exist with their exact profiles
+        // Scrub any legacy STF-* IDs from all existing staff members
+        db.staffMembers.forEach((s, i) => {
+          if (s.staffId && /^stf-/i.test(String(s.staffId))) {
+            s.staffId = "";
+          }
+          if (s.id && /^stf-/i.test(String(s.id))) {
+            const matchedSeed = SEED_STAFF_MEMBERS.find(
+              sd => sd.email.toLowerCase() === (s.email || "").toLowerCase() || sd.role === s.role
+            );
+            s.id = matchedSeed ? matchedSeed.id : ("staff_" + (i + 1));
+          }
+          if (s.staffId === undefined) {
+            s.staffId = (!/^staff_/i.test(String(s.id || "")) && !/^stf-/i.test(String(s.id || ""))) ? String(s.id || "") : "";
+          }
+        });
+
+        // Guarantee all 6 operational staff members exist with their profiles
         SEED_STAFF_MEMBERS.forEach(seedSt => {
-          let idx = db.staffMembers.findIndex(s => s.email.toLowerCase() === seedSt.email.toLowerCase() || s.id === seedSt.id || s.role === seedSt.role);
+          let idx = db.staffMembers.findIndex(
+            s => (s.email || "").toLowerCase() === seedSt.email.toLowerCase() || s.id === seedSt.id || s.role === seedSt.role
+          );
           if (idx === -1) {
             db.staffMembers.push(JSON.parse(JSON.stringify(seedSt)));
           } else {
             const cur = db.staffMembers[idx];
-            cur.id = seedSt.id;
-            cur.name = seedSt.name;
-            cur.email = seedSt.email;
-            cur.role = seedSt.role;
+            if (!cur.id || /^stf-/i.test(String(cur.id))) cur.id = seedSt.id;
+            if (cur.staffId === undefined || /^stf-/i.test(String(cur.staffId))) cur.staffId = "";
+            cur.name = cur.name || seedSt.name;
+            cur.email = cur.email || seedSt.email;
+            cur.role = cur.role || seedSt.role;
             cur.phone = cur.phone || seedSt.phone;
             cur.dept = cur.dept || seedSt.dept;
             cur.shift = cur.shift || seedSt.shift;
@@ -3662,6 +3700,14 @@ const IMG = {
             if (!cur.accesses || cur.accesses.length === 0 || cur.accesses.length < seedSt.accesses.length) {
               cur.accesses = [...seedSt.accesses];
             }
+          }
+        });
+      }
+      if (Array.isArray(db.expenses)) {
+        db.expenses.forEach(ex => {
+          if (ex.responsibleStaffId && /^stf-/i.test(String(ex.responsibleStaffId))) {
+            const matched = (db.staffMembers || []).find(s => s.name === ex.responsibleStaffName);
+            ex.responsibleStaffId = matched ? (getCleanStaffId(matched) || matched.id) : "";
           }
         });
       }
@@ -3705,14 +3751,18 @@ const IMG = {
         : SEED_STAFF_MEMBERS;
 
       let found = null;
-      if (sess.staffId) {
-        found = staffList.find(s => s.id === sess.staffId);
+      if (sess.staffId && !/^stf-/i.test(String(sess.staffId))) {
+        found = staffList.find(s => s.id === sess.staffId || getCleanStaffId(s) === sess.staffId);
       }
       if (!found && sess.id) {
-        found = staffList.find(s => s.email.toLowerCase() === sess.id.toLowerCase() || s.id.toLowerCase() === sess.id.toLowerCase());
+        found = staffList.find(s =>
+          (s.email || "").toLowerCase() === sess.id.toLowerCase() ||
+          (s.id || "").toLowerCase() === sess.id.toLowerCase() ||
+          getCleanStaffId(s).toLowerCase() === sess.id.toLowerCase()
+        );
       }
       if (!found && sess.name) {
-        found = staffList.find(s => s.name.toLowerCase() === sess.name.toLowerCase());
+        found = staffList.find(s => (s.name || "").toLowerCase() === sess.name.toLowerCase());
       }
       if (!found && staffList.length > 0) {
         found = staffList[0];
@@ -3732,10 +3782,14 @@ const IMG = {
       const roleEl = document.getElementById("activeAdminRole");
 
       const accesses = Array.isArray(activeStaff.accesses) ? activeStaff.accesses : (ROLE_DEFAULT_ACCESS_MAP[activeStaff.role] || ALL_ERP_MODULES);
+      const customId = getCleanStaffId(activeStaff);
 
       if (avatarEl) avatarEl.textContent = activeStaff.avatar || activeStaff.name.slice(0, 2).toUpperCase();
       if (nameEl) nameEl.textContent = activeStaff.name;
-      if (staffIdBadgeEl) staffIdBadgeEl.textContent = activeStaff.id;
+      if (staffIdBadgeEl) {
+        staffIdBadgeEl.textContent = customId;
+        staffIdBadgeEl.style.display = customId ? "inline-block" : "none";
+      }
       if (roleEl) roleEl.textContent = `${activeStaff.role} • ${accesses.length}/9 Modules`;
     }
 
@@ -3762,8 +3816,13 @@ const IMG = {
       const ddRoleText = document.getElementById("ddAdminRoleText");
       if (ddRoleText) ddRoleText.textContent = activeStaff.role;
 
+      const customId = getCleanStaffId(activeStaff);
       const ddMetaText = document.getElementById("ddAdminMetaText");
-      if (ddMetaText) ddMetaText.textContent = `${activeStaff.id} • ${activeStaff.email} • ${activeStaff.phone}`;
+      if (ddMetaText) {
+        ddMetaText.textContent = customId
+          ? `${customId} • ${activeStaff.email} • ${activeStaff.phone}`
+          : `${activeStaff.email} • ${activeStaff.phone}`;
+      }
 
       const ddDeptText = document.getElementById("ddAdminDeptText");
       if (ddDeptText) ddDeptText.textContent = `${activeStaff.dept || "Executive & Strategy"} • ${activeStaff.shift || "Full-Time"}`;
@@ -3794,54 +3853,6 @@ const IMG = {
       const myDueTotal = myDuePayments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
       const dueValEl = document.getElementById("ddAdminDueVal");
       if (dueValEl) dueValEl.textContent = formatBDT(myDueTotal);
-
-      // Section C: Assigned Module Access (RBAC) & Strict Sidebar Lock Toggle
-      const accesses = Array.isArray(activeStaff.accesses) ? activeStaff.accesses : (ROLE_DEFAULT_ACCESS_MAP[activeStaff.role] || ALL_ERP_MODULES);
-      const accessCountBadge = document.getElementById("ddAdminAccessCountBadge");
-      if (accessCountBadge) accessCountBadge.textContent = `${accesses.length} / 9 Modules`;
-
-      const pillsWrap = document.getElementById("ddAdminAccessPills");
-      if (pillsWrap) {
-        pillsWrap.innerHTML = ALL_ERP_MODULES.map(mod => {
-          const allowed = accesses.includes(mod);
-          if (allowed) {
-            return `<span class="badge badge-green" style="font-size:10px;padding:3px 7px;font-weight:600;">✓ ${escapeHtmlText(mod)}</span>`;
-          } else {
-            return `<span class="badge badge-secondary" style="font-size:10px;padding:3px 7px;opacity:0.65;">🔒 ${escapeHtmlText(mod)}</span>`;
-          }
-        }).join(" ");
-      }
-
-      // Section D: 1-Click Operational Staff Switcher
-      const switchListEl = document.getElementById("ddStaffSwitchList");
-      if (switchListEl) {
-        const staffList = (ERP_DB && Array.isArray(ERP_DB.staffMembers) && ERP_DB.staffMembers.length)
-          ? ERP_DB.staffMembers
-          : SEED_STAFF_MEMBERS;
-        switchListEl.innerHTML = staffList.map(st => {
-          const isCur = st.id === activeStaff.id;
-          const stAcc = Array.isArray(st.accesses) ? st.accesses : (ROLE_DEFAULT_ACCESS_MAP[st.role] || ALL_ERP_MODULES);
-          return `
-            <div class="erp-dd-staff-card ${isCur ? 'active-staff' : ''}" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border-radius:8px;margin-bottom:6px;background:var(--bg-elevated);border:1px solid ${isCur ? 'var(--accent-rose-deep)' : 'var(--border-color)'};">
-              <div style="display:flex;align-items:center;gap:8px;min-width:0;">
-                <div class="erp-dd-avatar-circle" style="width:28px;height:28px;font-size:11px;flex-shrink:0;">${st.avatar || "ST"}</div>
-                <div style="min-width:0;">
-                  <div style="font-weight:700;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                    ${escapeHtmlText(st.name)}
-                    <span class="mono" style="font-size:10px;color:var(--text-muted);font-weight:normal;margin-left:4px;">${st.id}</span>
-                  </div>
-                  <div style="font-size:10.5px;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                    ${escapeHtmlText(st.role.split("(")[0].trim())} • <span class="mono">${stAcc.length}/9 Mod</span>
-                  </div>
-                </div>
-              </div>
-              <div>
-                ${isCur ? `<span class="badge badge-green" style="font-size:10px;">● Active</span>` : `<button type="button" class="btn btn-xs btn-secondary" onclick="switchActiveErpStaffProfile('${st.id}')">Switch →</button>`}
-              </div>
-            </div>
-          `;
-        }).join("");
-      }
     }
 
     function toggleAdminProfileDropdown() {
@@ -3976,29 +3987,36 @@ const IMG = {
       const staffList = (ERP_DB && Array.isArray(ERP_DB.staffMembers) && ERP_DB.staffMembers.length)
         ? ERP_DB.staffMembers
         : SEED_STAFF_MEMBERS;
-      const targetId = staffId || window.__erpSessionObj?.staffId || "STF-101";
-      const st = staffList.find(s => s.id === targetId) || staffList[0];
+      const targetId = staffId || window.__erpSessionObj?.staffId || "staff_tahmid";
+      const st = staffList.find(s => s.id === targetId || getCleanStaffId(s) === targetId) || staffList[0];
       if (!st) return;
 
       currentModalStaffId = st.id;
       const modal = document.getElementById("adminProfileModal");
       if (!modal) return;
 
+      const customId = getCleanStaffId(st);
       const apModalStaffId = document.getElementById("apModalStaffId");
-      if (apModalStaffId) apModalStaffId.textContent = st.id;
+      if (apModalStaffId) {
+        apModalStaffId.textContent = customId ? `ID: ${customId}` : "";
+        apModalStaffId.style.display = customId ? "inline-block" : "none";
+      }
 
-      // Quick Switcher Pills: render all 6 staff pills
+      // Quick Switcher Pills: render all staff pills without STF-* showcasing
       const quickPillsEl = document.getElementById("modalStaffQuickPills");
       if (quickPillsEl) {
         quickPillsEl.innerHTML = staffList.map(s => {
           const isSel = s.id === st.id;
-          return `<button type="button" class="btn btn-xs ${isSel ? 'btn-primary' : 'btn-secondary'}" onclick="openAdminProfileModal('${s.id}')" style="font-size:11px;padding:3px 10px;">${escapeHtmlText(s.name.split(" ")[0])} (${s.id})</button>`;
+          const cid = getCleanStaffId(s);
+          return `<button type="button" class="btn btn-xs ${isSel ? 'btn-primary' : 'btn-secondary'}" onclick="openAdminProfileModal('${s.id}')" style="font-size:11px;padding:3px 10px;">${escapeHtmlText(s.name.split(" ")[0])}${cid ? ' (' + escapeHtmlText(cid) + ')' : ''}</button>`;
         }).join("");
       }
 
       // Fill editable input fields
       const editIdEl = document.getElementById("apStaffEditId");
       if (editIdEl) editIdEl.value = st.id;
+      const customIdEl = document.getElementById("apStaffCustomId");
+      if (customIdEl) customIdEl.value = customId;
       const nameEl = document.getElementById("apStaffName");
       if (nameEl) nameEl.value = st.name || "";
       const emailEl = document.getElementById("apStaffEmail");
@@ -4129,6 +4147,7 @@ const IMG = {
       const oldName = st.name;
       const oldRole = st.role;
 
+      const newCustomId = (document.getElementById("apStaffCustomId")?.value || "").trim();
       const newName = document.getElementById("apStaffName")?.value.trim() || st.name;
       const newEmail = document.getElementById("apStaffEmail")?.value.trim() || st.email;
       const newPhone = document.getElementById("apStaffPhone")?.value.trim() || st.phone;
@@ -4143,6 +4162,7 @@ const IMG = {
 
       // Update staff record
       Object.assign(st, {
+        staffId: newCustomId,
         name: newName,
         email: newEmail,
         phone: newPhone,
@@ -4207,33 +4227,6 @@ const IMG = {
       const togglePassBtn = document.getElementById("togglePassVisBtn");
       const passInput = document.getElementById("loginAdminPass");
       const idInput = document.getElementById("loginAdminId");
-      const roleSelect = document.getElementById("loginRoleSelect");
-
-      // Auto-populate & sync role selector on login gate
-      if (roleSelect) {
-        if (roleSelect.options.length === 0 || !Array.from(roleSelect.options).some(o => o.value === "Finance & Accounts Controller")) {
-          roleSelect.innerHTML = OPERATIONAL_ROLES.map(r => `<option value="${escapeHtmlText(r)}">${escapeHtmlText(r)}</option>`).join("");
-        }
-
-        const syncRoleToStaffId = (roleVal) => {
-          const staffList = (ERP_DB && Array.isArray(ERP_DB.staffMembers) && ERP_DB.staffMembers.length)
-            ? ERP_DB.staffMembers
-            : SEED_STAFF_MEMBERS;
-          const matchedStaff = staffList.find(s => s.role === roleVal);
-          if (matchedStaff && idInput) {
-            idInput.value = matchedStaff.email;
-          }
-        };
-
-        roleSelect.addEventListener("change", () => {
-          syncRoleToStaffId(roleSelect.value);
-        });
-
-        // Initialize default email if empty
-        if (idInput && !idInput.value.trim() && roleSelect.value) {
-          syncRoleToStaffId(roleSelect.value);
-        }
-      }
 
       if (togglePassBtn && passInput) {
         togglePassBtn.addEventListener("click", () => {
@@ -4246,7 +4239,6 @@ const IMG = {
           e.preventDefault();
           const rawId = (idInput?.value || "").trim().toLowerCase();
           const rawPass = (passInput?.value || "").trim();
-          const chosenRole = roleSelect ? roleSelect.value : "";
           const remember = Boolean(document.getElementById("rememberSessionCheck")?.checked);
 
           const staffList = (ERP_DB && Array.isArray(ERP_DB.staffMembers) && ERP_DB.staffMembers.length)
@@ -4254,9 +4246,10 @@ const IMG = {
             : SEED_STAFF_MEMBERS;
 
           const matchedStaff = staffList.find(s =>
-            s.email.toLowerCase() === rawId ||
-            s.id.toLowerCase() === rawId ||
-            (rawId === "tehzib-admin" && s.id === "STF-101")
+            (s.email || "").toLowerCase() === rawId ||
+            (s.id || "").toLowerCase() === rawId ||
+            getCleanStaffId(s).toLowerCase() === rawId ||
+            (rawId === "tehzib-admin" && s.email === "admin@tehzib.com")
           );
 
           const matchedAdmin = AUTHORIZED_ADMINS[rawId];
@@ -4271,14 +4264,14 @@ const IMG = {
             .then(r => r.json())
             .then(res => {
               if ((res && res.ok && res.data?.session) || (matchedStaff && isLocalMatch) || (matchedAdmin && isLocalMatch)) {
-                handleSuccessfulLogin(matchedStaff, matchedAdmin, res?.data?.session, chosenRole, remember, idInput.value.trim());
+                handleSuccessfulLogin(matchedStaff, matchedAdmin, res?.data?.session, remember, idInput.value.trim());
               } else {
                 document.getElementById("authErrorBanner").style.display = "block";
               }
             })
             .catch(() => {
               if ((matchedStaff && isLocalMatch) || (matchedAdmin && isLocalMatch)) {
-                handleSuccessfulLogin(matchedStaff, matchedAdmin, null, chosenRole, remember, idInput.value.trim());
+                handleSuccessfulLogin(matchedStaff, matchedAdmin, null, remember, idInput.value.trim());
               } else {
                 document.getElementById("authErrorBanner").style.display = "block";
               }
@@ -4290,32 +4283,31 @@ const IMG = {
       if (logoutBtn) {
         logoutBtn.addEventListener("click", lockErpWorkspace);
       }
-      const adminSignOutBtn = document.getElementById("adminSignOutBtn");
-      if (adminSignOutBtn) {
-        adminSignOutBtn.addEventListener("click", lockErpWorkspace);
-      }
     }
 
-    function handleSuccessfulLogin(matchedStaff, matchedAdmin, srvSess, chosenRole, remember, typedId) {
+    function handleSuccessfulLogin(matchedStaff, matchedAdmin, srvSess, remember, typedId) {
       const errBanner = document.getElementById("authErrorBanner");
       if (errBanner) errBanner.style.display = "none";
 
       const staffList = (ERP_DB && Array.isArray(ERP_DB.staffMembers) && ERP_DB.staffMembers.length)
         ? ERP_DB.staffMembers
         : SEED_STAFF_MEMBERS;
-      const st = matchedStaff || staffList.find(s => s.role === chosenRole) || staffList[0];
+      const st = matchedStaff || (matchedAdmin ? staffList.find(s => s.role === matchedAdmin.role || s.email.toLowerCase() === typedId.toLowerCase()) : null) || staffList[0];
+
+      const resolvedRole = st ? st.role : (matchedAdmin?.role || srvSess?.role || "Founder & Store Owner");
 
       const sessionObj = {
-        staffId: st ? st.id : (srvSess?.staffId || "STF-101"),
+        staffId: st ? st.id : (srvSess?.staffId || "staff_tahmid"),
+        customStaffId: st ? getCleanStaffId(st) : "",
         id: st ? st.email : (srvSess?.email || typedId),
-        name: st ? st.name : (srvSess?.name || "Tahmid Alvi"),
+        name: st ? st.name : (srvSess?.name || (matchedAdmin?.name || "Tahmid Alvi")),
         phone: st ? st.phone : "+880 1711-889900",
-        role: st ? st.role : (chosenRole || srvSess?.role || "Founder & Store Owner (Full Access)"),
+        role: resolvedRole,
         dept: st ? st.dept : "Executive & Strategy",
         shift: st ? st.shift : "Full-Time Executive (Uttara HQ)",
         status: st ? (st.status || "Active") : "Active",
-        avatar: st ? (st.avatar || "TA") : (srvSess?.avatar || "TA"),
-        accesses: (st && Array.isArray(st.accesses)) ? st.accesses : (ROLE_DEFAULT_ACCESS_MAP[st ? st.role : chosenRole] || ALL_ERP_MODULES)
+        avatar: st ? (st.avatar || "TA") : (matchedAdmin?.avatar || srvSess?.avatar || "TA"),
+        accesses: (st && Array.isArray(st.accesses) && st.accesses.length) ? st.accesses : (ROLE_DEFAULT_ACCESS_MAP[resolvedRole] || ALL_ERP_MODULES)
       };
 
       if (remember) {
@@ -4327,7 +4319,7 @@ const IMG = {
       showToast(`Authenticated into Tehzib OMS as ${sessionObj.name} (${sessionObj.role})`);
     }
 
-    function unlockErpWorkspace(sessionObj) {
+    function unlockErpWorkspace(sessionObj, switchToAdmin = true) {
       window.__erpAdminAuthenticated = true;
       const staffList = (ERP_DB && Array.isArray(ERP_DB.staffMembers) && ERP_DB.staffMembers.length)
         ? ERP_DB.staffMembers
@@ -4346,11 +4338,13 @@ const IMG = {
       }
       window.__erpSessionObj = sessionObj;
 
-      switchWorkspaceMode("admin");
-      const authGate = document.getElementById("authGateScreen");
-      const erpShell = document.getElementById("erpAppShell");
-      if (authGate) authGate.style.display = "none";
-      if (erpShell) erpShell.style.display = "block";
+      if (switchToAdmin) {
+        switchWorkspaceMode("admin");
+        const authGate = document.getElementById("authGateScreen");
+        const erpShell = document.getElementById("erpAppShell");
+        if (authGate) authGate.style.display = "none";
+        if (erpShell) erpShell.style.display = "block";
+      }
 
       updateAdminProfileTopbar();
       renderAdminProfileDropdown();
@@ -4364,7 +4358,7 @@ const IMG = {
       const wtPayStaffEl = document.getElementById("wtPayAdvStaff");
       if (wtPayStaffEl) wtPayStaffEl.value = sessionObj.name;
 
-      if (window.__pendingErpTargetView) {
+      if (switchToAdmin && window.__pendingErpTargetView) {
         switchErpView(window.__pendingErpTargetView);
         window.__pendingErpTargetView = "";
       } else {
@@ -8264,7 +8258,7 @@ const IMG = {
         const amount = Number(document.getElementById("expAmount").value) || 0;
         const accKey = document.getElementById("expAccount").value;
         const staffName = document.getElementById("expResponsibleStaff")?.value || "Nadia Sultana";
-        const staffObj = (ERP_DB.staffMembers || []).find(s => s.name === staffName) || { id: "STF-100", name: staffName, role: "Operations Staff" };
+        const staffObj = (ERP_DB.staffMembers || []).find(s => s.name === staffName) || { id: "staff_ops", staffId: "", name: staffName, role: "Operations Staff" };
 
         ERP_DB.expenses.unshift({
           id: "EXP-" + (ERP_DB.expenses.length + 305),
@@ -8273,7 +8267,7 @@ const IMG = {
           details,
           category,
           account: accKey,
-          responsibleStaffId: staffObj.id,
+          responsibleStaffId: getCleanStaffId(staffObj) || staffObj.id,
           responsibleStaffName: staffObj.name,
           responsibleStaffRole: staffObj.role,
           amount
@@ -8489,7 +8483,8 @@ const IMG = {
       // Bind Working Team Staff Create / Edit Form
       document.getElementById("workingTeamStaffForm")?.addEventListener("submit", e => {
         e.preventDefault();
-        const editId = document.getElementById("wtStaffEditId")?.value || "";
+        const editId = document.getElementById("wtStaffEditId")?.value || document.getElementById("wtStaffTargetSelect")?.value || "";
+        const customStaffId = document.getElementById("wtStaffIdInput")?.value?.trim() || "";
         const name = document.getElementById("wtStaffName")?.value?.trim();
         const phone = document.getElementById("wtStaffPhone")?.value?.trim();
         const email = document.getElementById("wtStaffEmail")?.value?.trim();
@@ -8504,22 +8499,26 @@ const IMG = {
         if (editId) {
           const st = ERP_DB.staffMembers.find(x => x.id === editId);
           if (st) {
-            Object.assign(st, { name, phone, email, role, dept, status, accesses });
-            showToast(`Updated Staff "${name}" (${role})`);
+            Object.assign(st, { staffId: customStaffId, name, phone, email, role, dept, status, accesses });
+            showToast(`Updated Staff "${name}"${customStaffId ? ` (Staff ID: ${customStaffId})` : ""} (${role})`);
           }
         } else {
-          const newId = "STF-" + (ERP_DB.staffMembers.length + 106);
+          const internalId = "staff_" + Date.now();
+          const avatarInit = name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase() || "ST";
           ERP_DB.staffMembers.push({
-            id: newId,
+            id: internalId,
+            staffId: customStaffId,
             name,
             phone,
             email,
             role,
             dept,
+            shift: "09:00 AM – 06:00 PM",
+            avatar: avatarInit,
             status,
             accesses: accesses.length ? accesses : ["Dashboard & BI", "Orders & POS"]
           });
-          showToast(`Created Staff "${name}" (${newId}) & assigned role/accesses!`);
+          showToast(`Created Staff "${name}"${customStaffId ? ` (Staff ID: ${customStaffId})` : ""} & assigned role/accesses!`);
         }
         resetWorkingTeamStaffForm();
         saveErpDatabase();
@@ -8610,7 +8609,7 @@ const IMG = {
       if (ddEditProfile) {
         ddEditProfile.addEventListener("click", () => {
           const activeStaff = getActiveAdminStaffRecord();
-          openAdminProfileModal(activeStaff ? activeStaff.id : "STF-101");
+          openAdminProfileModal(activeStaff ? activeStaff.id : "staff_tahmid");
         });
       }
       const ddMyLedger = document.getElementById("ddMyLedgerBtn");
@@ -8697,8 +8696,8 @@ const IMG = {
         if (cur && cur !== "__ADD_NEW__" && staffList.some(s => s.name === cur)) el.value = cur;
       });
 
-      // 4. Staff Roles (in Working Team & Admin Login Gate)
-      const roleSelectIds = ["wtStaffRole", "loginRoleSelect"];
+      // 4. Staff Roles (in Working Team)
+      const roleSelectIds = ["wtStaffRole"];
       roleSelectIds.forEach(selId => {
         const el = document.getElementById(selId);
         if (!el) return;
@@ -8783,6 +8782,12 @@ const IMG = {
         confirmText: "+ Save & Select Option",
         customHtml: `
           <div style="display:flex;flex-direction:column;gap:10px;">
+            ${optionType === 'staff' ? `
+              <div>
+                <label style="font-size:11px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:4px;">Staff ID</label>
+                <input type="text" id="customOptStaffIdInput" class="info-edit-input mono" placeholder="Enter Staff ID" />
+              </div>
+            ` : ""}
             <div>
               <label style="font-size:11px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:4px;">${cfg.label}</label>
               <input type="text" id="customOptPrimaryInput" class="info-edit-input" placeholder="${cfg.placeholder}" required />
@@ -8798,6 +8803,7 @@ const IMG = {
         onConfirm: () => {
           const val = document.getElementById("customOptPrimaryInput")?.value?.trim();
           const extra = document.getElementById("customOptExtraInput")?.value?.trim();
+          const customStaffId = document.getElementById("customOptStaffIdInput")?.value?.trim() || "";
           if (!val) {
             showToast("Please enter a valid name");
             return;
@@ -8815,12 +8821,15 @@ const IMG = {
             const roleName = extra || "Operations & Accounts Executive";
             if (!ERP_DB.staffMembers.some(s => s.name.toLowerCase() === val.toLowerCase())) {
               ERP_DB.staffMembers.push({
-                id: "STF-" + (ERP_DB.staffMembers.length + 106),
+                id: "staff_" + Date.now(),
+                staffId: customStaffId,
                 name: val,
                 phone: "+880 1711-000000",
                 email: val.toLowerCase().replace(/[^a-z0-9]/g, "") + "@tehzib.com",
                 role: roleName,
                 dept: "Operations",
+                shift: "09:00 AM – 06:00 PM",
+                avatar: val.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase() || "ST",
                 status: "Active",
                 accesses: ["Dashboard & BI", "Suppliers & PO", "Expenses & Payments"]
               });
@@ -9088,6 +9097,7 @@ const IMG = {
       if (staffBody) {
         staffBody.innerHTML = staffList.map(st => {
           const isActiveAdmin = (st.id === activeStaff?.id);
+          const customId = getCleanStaffId(st);
           const stExps = expenses.filter(e => e.responsibleStaffName === st.name || e.responsibleStaffId === st.id || e.staff === st.name || e.createdBy === st.name);
           const stExpTotal = stExps.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
           const stAdvTotal = payments.filter(p => (p.advanceByStaff === st.name || p.staff === st.name) && p.paymentType === "Advance Payment").reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
@@ -9103,7 +9113,7 @@ const IMG = {
                       <strong style="font-size:13px;">${escapeHtmlText(st.name)}</strong>
                       ${isActiveAdmin ? `<span class="badge badge-green" style="font-size:9.5px;padding:1px 6px;">● Logged-In Admin</span>` : ''}
                     </div>
-                    <div class="mono" style="font-size:11px;color:var(--accent-rose-deep);">${st.id} • ${escapeHtmlText(st.phone)}</div>
+                    <div class="mono" style="font-size:11px;color:var(--accent-rose-deep);">${customId ? `${escapeHtmlText(customId)} • ` : ''}${escapeHtmlText(st.phone)}</div>
                     <div class="mono" style="font-size:10px;color:var(--text-muted);">${escapeHtmlText(st.email)}</div>
                   </div>
                 </div>
@@ -9221,29 +9231,57 @@ const IMG = {
       syncAllTopTableScrollbars();
     }
 
+    function updateEmployeeStaffId(recordId, newStaffId) {
+      const staffList = ERP_DB.staffMembers || [];
+      const st = staffList.find(x => x.id === recordId);
+      if (!st) return;
+      st.staffId = String(newStaffId || "").trim();
+      saveErpDatabase();
+      updateAdminProfileTopbar();
+      renderAdminProfileDropdown();
+      renderWorkingTeamModule();
+      const editId = document.getElementById("wtStaffEditId")?.value || "";
+      if (editId === st.id && document.getElementById("wtStaffIdInput")) {
+        document.getElementById("wtStaffIdInput").value = st.staffId;
+      }
+      showToast(st.staffId ? `Assigned Staff ID "${st.staffId}" to ${st.name}` : `Cleared Staff ID for ${st.name}`);
+    }
+
+    function handleWtStaffTargetSelect(recordId) {
+      if (!recordId) {
+        resetWorkingTeamStaffForm();
+        return;
+      }
+      editWorkingTeamStaff(recordId);
+    }
+
     function editWorkingTeamStaff(staffId) {
       const st = (ERP_DB.staffMembers || []).find(x => x.id === staffId);
       if (!st) return;
       switchWtTab("staff");
-      document.getElementById("wtStaffEditId").value = st.id;
-      document.getElementById("wtStaffName").value = st.name || "";
-      document.getElementById("wtStaffPhone").value = st.phone || "";
-      document.getElementById("wtStaffEmail").value = st.email || "";
-      document.getElementById("wtStaffRole").value = st.role || "";
-      document.getElementById("wtStaffDept").value = st.dept || "";
-      document.getElementById("wtStaffStatus").value = st.status || "Active";
+      if (document.getElementById("wtStaffEditId")) document.getElementById("wtStaffEditId").value = st.id;
+      if (document.getElementById("wtStaffTargetSelect")) document.getElementById("wtStaffTargetSelect").value = st.id;
+      if (document.getElementById("wtStaffIdInput")) document.getElementById("wtStaffIdInput").value = getCleanStaffId(st);
+      if (document.getElementById("wtStaffName")) document.getElementById("wtStaffName").value = st.name || "";
+      if (document.getElementById("wtStaffPhone")) document.getElementById("wtStaffPhone").value = st.phone || "";
+      if (document.getElementById("wtStaffEmail")) document.getElementById("wtStaffEmail").value = st.email || "";
+      if (document.getElementById("wtStaffRole")) document.getElementById("wtStaffRole").value = st.role || "";
+      if (document.getElementById("wtStaffDept")) document.getElementById("wtStaffDept").value = st.dept || "";
+      if (document.getElementById("wtStaffStatus")) document.getElementById("wtStaffStatus").value = st.status || "Active";
       const accSet = new Set(st.accesses || []);
       document.querySelectorAll("#wtAccessCheckboxes input[type='checkbox']").forEach(cb => {
         cb.checked = accSet.has(cb.value);
       });
       const btn = document.getElementById("wtStaffSubmitBtn");
-      if (btn) btn.textContent = `✓ Update "${st.name}" Role & Access`;
-      document.getElementById("wtStaffName")?.focus();
+      if (btn) btn.textContent = `✓ Update "${st.name}" Profile, Staff ID & Access`;
+      document.getElementById("wtStaffIdInput")?.focus();
       showToast(`Loaded "${st.name}" into Staff & Access Editor`);
     }
 
     function resetWorkingTeamStaffForm() {
       if (document.getElementById("wtStaffEditId")) document.getElementById("wtStaffEditId").value = "";
+      if (document.getElementById("wtStaffTargetSelect")) document.getElementById("wtStaffTargetSelect").value = "";
+      if (document.getElementById("wtStaffIdInput")) document.getElementById("wtStaffIdInput").value = "";
       if (document.getElementById("wtStaffName")) document.getElementById("wtStaffName").value = "";
       if (document.getElementById("wtStaffPhone")) document.getElementById("wtStaffPhone").value = "";
       if (document.getElementById("wtStaffEmail")) document.getElementById("wtStaffEmail").value = "";
@@ -11509,26 +11547,34 @@ const IMG = {
 
     // Restore server-authenticated admin session or initial /admin mode
     try {
+      const isInitialAdminRoute =
+        window.__TEHZIB_INITIAL_MODE__ === "admin" || window.location.pathname.startsWith("/admin");
       const srvAdmin = window.__TEHZIB_INITIAL_SERVER_STATE__?.adminSession;
       if (srvAdmin) {
-        unlockErpWorkspace({
-          id: srvAdmin.email || srvAdmin.name,
-          role: srvAdmin.role,
-          avatar: srvAdmin.avatar || "TA"
-        });
+        unlockErpWorkspace(
+          {
+            id: srvAdmin.email || srvAdmin.name,
+            role: srvAdmin.role,
+            avatar: srvAdmin.avatar || "TA"
+          },
+          isInitialAdminRoute
+        );
       } else {
         const savedSession = localStorage.getItem(AUTH_SESSION_KEY);
         if (savedSession) {
           const parsedSess = JSON.parse(savedSession);
-          if (parsedSess && parsedSess.id) unlockErpWorkspace(parsedSess);
+          if (parsedSess && parsedSess.id) unlockErpWorkspace(parsedSess, isInitialAdminRoute);
         }
       }
-      if (window.__TEHZIB_INITIAL_MODE__ === "admin" || window.location.pathname.startsWith("/admin")) {
+      if (isInitialAdminRoute) {
         switchWorkspaceMode("admin");
+      } else {
+        switchWorkspaceMode("storefront");
       }
     } catch (e) {}
 
     window.switchScreen = switchScreen;
+    window.switchWorkspaceMode = switchWorkspaceMode;
     window.openPDP = (pid) => switchScreen("product", { productId: pid });
     window.renderAll = renderAll;
     window.syncErpToStorefront = syncErpToStorefront;
@@ -11551,6 +11597,9 @@ const IMG = {
     window.triggerMultiChannelSync = triggerMultiChannelSync;
     window.editWorkingTeamStaff = editWorkingTeamStaff;
     window.resetWorkingTeamStaffForm = resetWorkingTeamStaffForm;
+    window.handleWtStaffTargetSelect = handleWtStaffTargetSelect;
+    window.updateEmployeeStaffId = updateEmployeeStaffId;
+    window.getCleanStaffId = getCleanStaffId;
     window.filterTeamReportByStaff = filterTeamReportByStaff;
     window.resetDefaultBrandLogos = resetDefaultBrandLogos;
     window.loadSlideIntoEditor = loadSlideIntoEditor;
