@@ -1084,6 +1084,42 @@ const IMG = {
           if (Array.isArray(srv.promoBanners) && srv.promoBanners.length) {
             state.promoBanners = JSON.parse(JSON.stringify(srv.promoBanners));
           }
+          if (srv.erpDb && Array.isArray(srv.erpDb.crmCustomers)) {
+            srv.erpDb.crmCustomers.forEach(c => {
+              if (!c || (!c.email && !c.phone)) return;
+              const existing = state.registeredCustomers.find(r => r.id === c.id)
+                || (c.email ? findCustomerByIdentifier(c.email) : null)
+                || (c.phone ? findCustomerByIdentifier(c.phone) : null);
+              const parsed = parseBdPhone(c.phone);
+              if (!existing) {
+                state.registeredCustomers.push({
+                  id: c.id,
+                  name: c.name || "Tehzib Member",
+                  email: c.email || "",
+                  phone: (parsed && parsed.display) || c.phone || "",
+                  phoneNormalized: (parsed && parsed.e164) || "",
+                  emailVerified: Boolean(c.email),
+                  phoneVerified: Boolean(parsed),
+                  gender: c.gender || "Not Specified",
+                  dob: c.dob || "Not Specified",
+                  address: c.address || "",
+                  passwordHash: "",
+                  points: Math.round(Number(c.points) || 0),
+                  rating: c.rating ? `${Number(c.rating).toFixed(1)} / 5.0` : "5.0 / 5.0",
+                  createdAt: c.createdAt || new Date().toISOString(),
+                  cart: [],
+                  wishlist: [],
+                  orders: [],
+                  notifications: [],
+                  avatar: ""
+                });
+              } else {
+                if (!existing.name && c.name) existing.name = c.name;
+                if (!existing.address && c.address) existing.address = c.address;
+                if (typeof c.points === "number") existing.points = Math.round(c.points);
+              }
+            });
+          }
           if (!state.isLoggedIn && srv.customerSession && srv.customerSession.customerId) {
             const matched = state.registeredCustomers.find(c => c.id === srv.customerSession.customerId);
             if (matched) {
@@ -1610,7 +1646,7 @@ const IMG = {
             <button type="button" class="card-wish-btn ${isWished ? "active" : ""}" data-toggle-wish="${p.id}" aria-label="Save to Wishlist">
               ${isWished ? "♥" : "♡"}
             </button>
-            <img src="${p.image}" alt="${p.title}" loading="lazy" />
+            <img src="${p.image}" alt="${p.title}" />
           </div>
           <div class="product-card-cat">${p.category}</div>
           <h3 class="product-card-title" data-open-pdp="${p.id}" title="${p.title}">${p.title}</h3>
@@ -3661,16 +3697,28 @@ const IMG = {
       if (!Array.isArray(db.staffMembers) || db.staffMembers.length === 0) {
         db.staffMembers = JSON.parse(JSON.stringify(SEED_STAFF_MEMBERS));
       } else {
-        // Scrub any legacy STF-* IDs from all existing staff members
+        // Scrub any legacy STF-* IDs from all existing staff members without creating duplicate internal IDs
+        const usedIds = new Set();
+        db.staffMembers.forEach(s => {
+          if (s.id && !/^stf-/i.test(String(s.id))) usedIds.add(s.id);
+        });
         db.staffMembers.forEach((s, i) => {
           if (s.staffId && /^stf-/i.test(String(s.staffId))) {
             s.staffId = "";
           }
           if (s.id && /^stf-/i.test(String(s.id))) {
-            const matchedSeed = SEED_STAFF_MEMBERS.find(
-              sd => sd.email.toLowerCase() === (s.email || "").toLowerCase() || sd.role === s.role
-            );
-            s.id = matchedSeed ? matchedSeed.id : ("staff_" + (i + 1));
+            const emailLow = (s.email || "").trim().toLowerCase();
+            const matchedByEmail = SEED_STAFF_MEMBERS.find(sd => sd.email.toLowerCase() === emailLow);
+            let candidate = matchedByEmail ? matchedByEmail.id : "";
+            if (!candidate || usedIds.has(candidate)) {
+              const cleanCustom = String(s.staffId || "").trim().replace(/[^a-zA-Z0-9_-]/g, "");
+              candidate = cleanCustom ? `staff_${cleanCustom}` : `staff_row_${i + 1}`;
+              while (usedIds.has(candidate)) {
+                candidate = `staff_row_${i + 1}_${usedIds.size + 1}`;
+              }
+            }
+            usedIds.add(candidate);
+            s.id = candidate;
           }
           if (s.staffId === undefined) {
             s.staffId = (!/^staff_/i.test(String(s.id || "")) && !/^stf-/i.test(String(s.id || ""))) ? String(s.id || "") : "";
@@ -3680,8 +3728,11 @@ const IMG = {
         // Guarantee all 6 operational staff members exist with their profiles
         SEED_STAFF_MEMBERS.forEach(seedSt => {
           let idx = db.staffMembers.findIndex(
-            s => (s.email || "").toLowerCase() === seedSt.email.toLowerCase() || s.id === seedSt.id || s.role === seedSt.role
+            s => (s.email || "").toLowerCase() === seedSt.email.toLowerCase() || s.id === seedSt.id
           );
+          if (idx === -1) {
+            idx = db.staffMembers.findIndex(s => s.role === seedSt.role);
+          }
           if (idx === -1) {
             db.staffMembers.push(JSON.parse(JSON.stringify(seedSt)));
           } else {
@@ -9339,7 +9390,8 @@ const IMG = {
         isJustForYou: true,
         specialTab: "Accessories",
         variants: ["Blush Pink", "Ivory Pearl", "Tortoiseshell"],
-        image: IMG.necklace,
+        image: IMG.clips,
+        gallery: [IMG.clips, IMG.necklace, IMG.jewelry_box, IMG.cream_bag],
         description: "Hand-polished cellulose acetate claw clip in Tehzib's signature Parisian Blush Pink with inlaid pearl accents and high-tension spring.",
         specs: "Material: Cellulose Acetate & Reinforced Spring • Length: 11cm • Variant SKU: TEH-ACC-CLP-PNK",
         seoKeywords: "pink claw clip bangladesh, hair accessories dhaka, tehzib claw clip",
@@ -10469,6 +10521,10 @@ const IMG = {
           setAuthAlert("Please enter your password.", "error");
           return;
         }
+        if (!cust.passwordHash) {
+          setAuthAlert("No password is set for this account yet. Sign in with One-Time OTP or use Forgot Password to set one.", "error");
+          return;
+        }
         const hashed = await hashPassword(pw);
         if (hashed !== cust.passwordHash) {
           setAuthAlert("Incorrect password. Please try again.", "error");
@@ -10989,12 +11045,16 @@ const IMG = {
     });
 
     document.getElementById("pdpPrevImgBtn").addEventListener("click", () => {
-      state.pdpGalleryIdx = (state.pdpGalleryIdx + 3) % 4;
+      const p = PRODUCTS.find(x => x.id === state.activeProductId) || PRODUCTS[0];
+      const len = Math.max(1, (p && Array.isArray(p.gallery) && p.gallery.length) ? p.gallery.length : 1);
+      state.pdpGalleryIdx = (state.pdpGalleryIdx - 1 + len) % len;
       renderPDP();
     });
 
     document.getElementById("pdpNextImgBtn").addEventListener("click", () => {
-      state.pdpGalleryIdx = (state.pdpGalleryIdx + 1) % 4;
+      const p = PRODUCTS.find(x => x.id === state.activeProductId) || PRODUCTS[0];
+      const len = Math.max(1, (p && Array.isArray(p.gallery) && p.gallery.length) ? p.gallery.length : 1);
+      state.pdpGalleryIdx = (state.pdpGalleryIdx + 1) % len;
       renderPDP();
     });
 

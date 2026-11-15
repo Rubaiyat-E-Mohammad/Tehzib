@@ -620,10 +620,26 @@ export async function buildHydratedPlatformState() {
   };
 }
 
+let persistPlatformQueue: Promise<unknown> = Promise.resolve();
+
 /**
  * Persists mutated ERP_DB + Storefront state back to PostgreSQL inside an ACID transaction.
+ * Serialized sequentially so overlapping autosaves cannot collide on SELECT/INSERT upserts.
  */
 export async function persistPlatformStateToPostgres(payload: {
+  erpDb?: Record<string, any>;
+  logos?: { light?: string; dark?: string };
+  notifications?: Array<Record<string, any>>;
+}) {
+  const run = persistPlatformQueue.then(
+    () => persistPlatformStateInner(payload),
+    () => persistPlatformStateInner(payload),
+  );
+  persistPlatformQueue = run.catch(() => undefined);
+  return run;
+}
+
+async function persistPlatformStateInner(payload: {
   erpDb?: Record<string, any>;
   logos?: { light?: string; dark?: string };
   notifications?: Array<Record<string, any>>;
@@ -1178,47 +1194,80 @@ export async function persistPlatformStateToPostgres(payload: {
                 : c.tier === "Inactive"
                   ? CustomerTier.INACTIVE
                   : CustomerTier.NEW;
-          await tx.customer.upsert({
-            where: { code: c.id },
-            create: {
-              id: c.id,
-              code: c.id,
-              name: c.name,
-              phone: c.phone,
-              email: c.email || null,
-              tier,
-              rating: Number(c.rating) || 4.9,
-              points: Math.round(Number(c.points) || 0),
-              ordersCount: Number(c.ordersCount) || 0,
-              completedOrders: Number(c.completedOrders) || 0,
-              spend: Math.round(Number(c.spend) || 0),
-              returnsCount: Number(c.returnsCount) || 0,
-              failedCount: Number(c.failedCount) || 0,
-              address: c.address || "",
-              notes: c.notes || "",
-              consentSms: c.consent?.sms !== false,
-              consentWhatsapp: c.consent?.whatsapp !== false,
-              consentEmail: c.consent?.email !== false,
-              referralCode: c.referralCode || null,
-            },
-            update: {
-              name: c.name,
-              email: c.email || null,
-              tier,
-              rating: Number(c.rating) || 4.9,
-              points: Math.round(Number(c.points) || 0),
-              ordersCount: Number(c.ordersCount) || 0,
-              completedOrders: Number(c.completedOrders) || 0,
-              spend: Math.round(Number(c.spend) || 0),
-              returnsCount: Number(c.returnsCount) || 0,
-              failedCount: Number(c.failedCount) || 0,
-              address: c.address || "",
-              notes: c.notes || "",
-              consentSms: c.consent?.sms !== false,
-              consentWhatsapp: c.consent?.whatsapp !== false,
-              consentEmail: c.consent?.email !== false,
-            },
-          });
+          const cleanEmail = c.email ? String(c.email).trim().toLowerCase() : null;
+          const cleanPhone = String(c.phone || "").trim();
+          let existingCust = await tx.customer.findUnique({ where: { code: c.id } });
+          if (!existingCust && (cleanEmail || cleanPhone)) {
+            existingCust = await tx.customer.findFirst({
+              where: {
+                OR: [
+                  ...(cleanEmail ? [{ email: cleanEmail }] : []),
+                  ...(cleanPhone ? [{ phone: cleanPhone }] : []),
+                ],
+              },
+            });
+          }
+          let safeEmail = cleanEmail;
+          if (safeEmail && (!existingCust || existingCust.email !== safeEmail)) {
+            const clash = await tx.customer.findUnique({ where: { email: safeEmail } });
+            if (clash && clash.id !== existingCust?.id) {
+              safeEmail = existingCust ? existingCust.email : null;
+            }
+          }
+          let safePhone = cleanPhone || existingCust?.phone || c.id;
+          if (safePhone && (!existingCust || existingCust.phone !== safePhone)) {
+            const phoneClash = await tx.customer.findUnique({ where: { phone: safePhone } });
+            if (phoneClash && phoneClash.id !== existingCust?.id) {
+              safePhone = existingCust ? existingCust.phone : `${safePhone}-${c.id}`;
+            }
+          }
+          if (existingCust) {
+            await tx.customer.update({
+              where: { id: existingCust.id },
+              data: {
+                name: c.name,
+                email: safeEmail,
+                phone: safePhone,
+                tier,
+                rating: Number(c.rating) || 4.9,
+                points: Math.round(Number(c.points) || 0),
+                ordersCount: Number(c.ordersCount) || 0,
+                completedOrders: Number(c.completedOrders) || 0,
+                spend: Math.round(Number(c.spend) || 0),
+                returnsCount: Number(c.returnsCount) || 0,
+                failedCount: Number(c.failedCount) || 0,
+                address: c.address || "",
+                notes: c.notes || "",
+                consentSms: c.consent?.sms !== false,
+                consentWhatsapp: c.consent?.whatsapp !== false,
+                consentEmail: c.consent?.email !== false,
+              },
+            });
+          } else {
+            await tx.customer.create({
+              data: {
+                id: c.id,
+                code: c.id,
+                name: c.name,
+                phone: safePhone,
+                email: safeEmail,
+                tier,
+                rating: Number(c.rating) || 4.9,
+                points: Math.round(Number(c.points) || 0),
+                ordersCount: Number(c.ordersCount) || 0,
+                completedOrders: Number(c.completedOrders) || 0,
+                spend: Math.round(Number(c.spend) || 0),
+                returnsCount: Number(c.returnsCount) || 0,
+                failedCount: Number(c.failedCount) || 0,
+                address: c.address || "",
+                notes: c.notes || "",
+                consentSms: c.consent?.sms !== false,
+                consentWhatsapp: c.consent?.whatsapp !== false,
+                consentEmail: c.consent?.email !== false,
+                referralCode: c.referralCode || null,
+              },
+            });
+          }
         }
       }
 

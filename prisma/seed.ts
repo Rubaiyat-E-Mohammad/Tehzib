@@ -2153,7 +2153,13 @@ const SEED_DATA = {
           "Ivory Pearl",
           "Tortoiseshell"
         ],
-        "image": "@img/necklace.jpg",
+        "image": "@img/clips.jpg",
+        "gallery": [
+          "@img/clips.jpg",
+          "@img/necklace.jpg",
+          "@img/jewelry_box.jpg",
+          "@img/cream_bag.jpg"
+        ],
         "description": "Hand-polished cellulose acetate claw clip in Tehzib's signature Parisian Blush Pink with inlaid pearl accents and high-tension spring.",
         "specs": "Material: Cellulose Acetate & Reinforced Spring • Length: 11cm • Variant SKU: TEH-ACC-CLP-PNK",
         "seoKeywords": "pink claw clip bangladesh, hair accessories dhaka, tehzib claw clip",

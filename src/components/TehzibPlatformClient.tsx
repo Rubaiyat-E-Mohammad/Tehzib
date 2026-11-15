@@ -31,7 +31,7 @@ declare global {
   }
 }
 
-const RUNTIME_VERSION = "66";
+const RUNTIME_VERSION = "69";
 const STATIC_MARKUP = { __html: PLATFORM_HTML_MARKUP };
 
 /**
