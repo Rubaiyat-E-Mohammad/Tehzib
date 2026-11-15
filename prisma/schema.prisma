@@ -142,6 +142,11 @@ enum StaffStatus {
   ACTIVE
   ON_LEAVE
   INACTIVE
+  INTERNSHIP
+  PROBATION
+  PERMANENT
+  NOTICE_PERIOD
+  CONTRACTUAL
 }
 
 enum LookupKind {
@@ -739,7 +744,8 @@ model Staff {
   roleId           String
   role             StaffRole         @relation(fields: [roleId], references: [id])
   dept             String?
-  status           StaffStatus       @default(ACTIVE)
+  shift            String            @default("Full-Time (Day Shift)")
+  status           StaffStatus       @default(PERMANENT)
   permissions      String[] // granular module access (overrides role defaults)
   avatar           String?
   lastLoginAt      DateTime?

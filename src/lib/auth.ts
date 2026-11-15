@@ -1,7 +1,8 @@
 import "server-only";
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
-import { hasPermission, type ModuleKey } from "@/lib/rbac";
+import { db } from "@/lib/db";
+import { ALL_MODULE_KEYS, hasPermission, type ModuleKey } from "@/lib/rbac";
 
 /**
  * Stateless signed-cookie sessions (HS256 JWT via `jose`).
@@ -74,7 +75,37 @@ export async function createAdminSession(s: AdminSession, remember = true) {
 }
 
 export async function getAdminSession(): Promise<AdminSession | null> {
-  return verify<AdminSession>((await cookies()).get(ADMIN_COOKIE)?.value, "admin");
+  const decoded = await verify<AdminSession>((await cookies()).get(ADMIN_COOKIE)?.value, "admin");
+  if (!decoded || !decoded.staffId) return null;
+
+  const staff = await db.staff.findUnique({
+    where: { id: decoded.staffId },
+    include: { role: true },
+  });
+  if (!staff || staff.status === "INACTIVE") {
+    return null;
+  }
+
+  const permissions =
+    staff.permissions.includes("*") || staff.role.name.toLowerCase().includes("founder")
+      ? ["*", ...ALL_MODULE_KEYS]
+      : staff.permissions;
+
+  return {
+    staffId: staff.id,
+    name: staff.name,
+    email: staff.email,
+    role: staff.role.name,
+    avatar:
+      staff.avatar ||
+      staff.name
+        .split(" ")
+        .map((w) => w[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase(),
+    permissions,
+  };
 }
 
 export async function destroyAdminSession() {

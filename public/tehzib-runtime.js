@@ -1384,14 +1384,22 @@ const IMG = {
         }
 
         if (window.__erpAdminAuthenticated) {
+          const activeStaff = getActiveAdminStaffRecord();
+          if (!activeStaff || activeStaff.status === "Inactive") {
+            lockErpWorkspace({ silent: true });
+            return;
+          }
           if (authGate) authGate.style.display = "none";
           if (erpShell) erpShell.style.display = "block";
-          if (window.__pendingErpTargetView) {
-            switchErpView(window.__pendingErpTargetView);
-            window.__pendingErpTargetView = "";
-          } else {
-            renderAllErpModules();
+          const curActiveEl = document.querySelector(".erp-view.active");
+          const curViewKey = curActiveEl ? curActiveEl.id.replace("view-", "") : "dashboard";
+          const desiredView = window.__pendingErpTargetView || curViewKey || "dashboard";
+          window.__pendingErpTargetView = "";
+          const desiredMod = VIEW_KEY_TO_MODULE[desiredView];
+          if (desiredMod && !hasActiveModuleAccess(desiredMod, activeStaff)) {
+            showToast(`🔒 Access Restricted: "${activeStaff.name}" (${activeStaff.role}) does not have permission for "${desiredMod}".`);
           }
+          switchErpView(resolvePermittedErpView(desiredView, activeStaff));
         } else {
           if (erpShell) erpShell.style.display = "none";
           if (authGate) authGate.style.display = "flex";
@@ -2846,9 +2854,9 @@ const IMG = {
         phone: "+880 1711-889900",
         role: "Founder & Store Owner",
         dept: "Executive & Strategy",
-        shift: "Full-Time Executive (Uttara HQ)",
+        shift: "Full-Time (Day Shift)",
         avatar: "TA",
-        status: "Active",
+        status: "Permanent",
         accesses: [
           "Dashboard & BI",
           "Product & Catalogue",
@@ -2869,9 +2877,9 @@ const IMG = {
         phone: "+880 1819-223311",
         role: "Finance & Accounts Controller",
         dept: "Finance, Accounts & COD Settlement",
-        shift: "09:30 AM – 06:30 PM",
+        shift: "Full-Time (Day Shift)",
         avatar: "FI",
-        status: "Active",
+        status: "Permanent",
         accesses: [
           "Dashboard & BI",
           "Suppliers & PO",
@@ -2888,9 +2896,9 @@ const IMG = {
         phone: "+880 1912-445588",
         role: "Procurement & Supplier Manager",
         dept: "Sourcing, Local MOQ & Direct Import",
-        shift: "10:00 AM – 07:00 PM",
+        shift: "Full-Time (Day Shift)",
         avatar: "NS",
-        status: "Active",
+        status: "Permanent",
         accesses: [
           "Dashboard & BI",
           "Product & Catalogue",
@@ -2907,9 +2915,9 @@ const IMG = {
         phone: "+880 1718-554433",
         role: "Inventory & Warehouse Lead",
         dept: "Uttara Sector 12 Warehouse & GRN Hub",
-        shift: "09:00 AM – 06:00 PM",
+        shift: "Full-Time (Day Shift)",
         avatar: "RH",
-        status: "Active",
+        status: "Permanent",
         accesses: [
           "Dashboard & BI",
           "Product & Catalogue",
@@ -2926,9 +2934,9 @@ const IMG = {
         phone: "+880 1611-778844",
         role: "Order Fulfillment & Courier Ops",
         dept: "Uttara Hub Dispatch, Courier & POS",
-        shift: "10:00 AM – 08:00 PM",
+        shift: "Full-Time (Day Shift)",
         avatar: "TH",
-        status: "Active",
+        status: "Permanent",
         accesses: [
           "Dashboard & BI",
           "Inventory & Stock",
@@ -2945,9 +2953,9 @@ const IMG = {
         phone: "+880 1715-664422",
         role: "Marketing, Merchandising & CMS",
         dept: "Brand, Promotions & Storefront CMS",
-        shift: "10:30 AM – 07:30 PM",
+        shift: "Full-Time (Day Shift)",
         avatar: "LC",
-        status: "Active",
+        status: "Permanent",
         accesses: [
           "Dashboard & BI",
           "Product & Catalogue",
@@ -2957,16 +2965,6 @@ const IMG = {
         ]
       }
     ];
-
-    const AUTHORIZED_ADMINS = {
-      "admin@tehzib.com": { pass: "Tehzib@2027", name: "Tahmid Alvi", role: "Founder & Store Owner", avatar: "TA" },
-      "tehzib-admin": { pass: "Tehzib@2027", name: "Tahmid Alvi", role: "Founder & Store Owner", avatar: "TA" },
-      "finance@tehzib.com": { pass: "Tehzib@2027", name: "Farhan Islam", role: "Finance & Accounts Controller", avatar: "FI" },
-      "procurement@tehzib.com": { pass: "Tehzib@2027", name: "Nadia Sultana", role: "Procurement & Supplier Manager", avatar: "NS" },
-      "inventory@tehzib.com": { pass: "Tehzib@2027", name: "Rafiqul Hasan", role: "Inventory & Warehouse Lead", avatar: "RH" },
-      "ops@tehzib.com": { pass: "Tehzib@2027", name: "Tanvir Hossain", role: "Order Fulfillment & Courier Ops", avatar: "TH" },
-      "cms@tehzib.com": { pass: "Tehzib@2027", name: "Lamia Chowdhury", role: "Marketing, Merchandising & CMS", avatar: "LC" }
-    };
 
     let uploadedSpImageData = "";
     let uploadedHeroImageData = "";
@@ -3581,12 +3579,16 @@ const IMG = {
     window.ERP_DB = ERP_DB;
 
     function loadErpDatabase() {
+      const srvDb = (window.__TEHZIB_INITIAL_SERVER_STATE__ && window.__TEHZIB_INITIAL_SERVER_STATE__.erpDb)
+        ? window.__TEHZIB_INITIAL_SERVER_STATE__.erpDb
+        : null;
+      const defDb = createDefaultErpDatabase();
+
       try {
         const raw = localStorage.getItem(ERP_STORAGE_KEY);
         if (raw) {
           const parsed = JSON.parse(raw);
           if (parsed && Array.isArray(parsed.products) && parsed.products.length > 0 && Array.isArray(parsed.suppliers)) {
-            const defDb = createDefaultErpDatabase();
             ERP_DB = parsed;
             if (!Array.isArray(ERP_DB.cms?.footerSections) || !ERP_DB.cms.footerSections.length) {
               if (!ERP_DB.cms) ERP_DB.cms = defDb.cms;
@@ -3601,36 +3603,8 @@ const IMG = {
             if (!Array.isArray(ERP_DB.paymentTermsList) || !ERP_DB.paymentTermsList.length) {
               ERP_DB.paymentTermsList = defDb.paymentTermsList;
             }
-            // Ensure 6 operational roles
-            ERP_DB.staffRoles = OPERATIONAL_ROLES;
-
-            // Ensure 6 operational staff members
-            if (!Array.isArray(ERP_DB.staffMembers)) ERP_DB.staffMembers = [];
-            SEED_STAFF_MEMBERS.forEach(seedSt => {
-              const existing = ERP_DB.staffMembers.find(s => s.id === seedSt.id || s.email === seedSt.email);
-              if (!existing) {
-                ERP_DB.staffMembers.push(JSON.parse(JSON.stringify(seedSt)));
-              } else {
-                if (!existing.shift) existing.shift = seedSt.shift;
-                if (!existing.avatar) existing.avatar = seedSt.avatar;
-                if (!existing.phone) existing.phone = seedSt.phone;
-                if (!existing.dept) existing.dept = seedSt.dept;
-                if (!Array.isArray(existing.accesses) || !existing.accesses.length) existing.accesses = seedSt.accesses;
-              }
-            });
             if (!Array.isArray(ERP_DB.paymentsLog) || !ERP_DB.paymentsLog.length) {
               ERP_DB.paymentsLog = defDb.paymentsLog;
-            }
-            if (Array.isArray(ERP_DB.expenses)) {
-              ERP_DB.expenses.forEach((ex, idx) => {
-                if (!ex.details) ex.details = ex.title + " — Verified voucher entry at Uttara Sector 12 Hub";
-                if (!ex.responsibleStaffName) {
-                  const fallbackStaff = ERP_DB.staffMembers[idx % ERP_DB.staffMembers.length];
-                  ex.responsibleStaffId = fallbackStaff.id;
-                  ex.responsibleStaffName = fallbackStaff.name;
-                  ex.responsibleStaffRole = fallbackStaff.role;
-                }
-              });
             }
             if (Array.isArray(ERP_DB.suppliers)) {
               ERP_DB.suppliers.forEach(s => {
@@ -3653,6 +3627,9 @@ const IMG = {
               }
             });
             ensureSixStaffAndRoles(ERP_DB);
+            try {
+              localStorage.setItem(ERP_STORAGE_KEY, JSON.stringify(ERP_DB));
+            } catch (e) {}
             window.ERP_DB = ERP_DB;
             return;
           }
@@ -3661,9 +3638,9 @@ const IMG = {
         console.warn("Could not load from localStorage:", e);
       }
 
-      if (window.__TEHZIB_INITIAL_SERVER_STATE__ && window.__TEHZIB_INITIAL_SERVER_STATE__.erpDb) {
+      if (srvDb) {
         try {
-          ERP_DB = JSON.parse(JSON.stringify(window.__TEHZIB_INITIAL_SERVER_STATE__.erpDb));
+          ERP_DB = JSON.parse(JSON.stringify(srvDb));
           if (window.__TEHZIB_INITIAL_SERVER_STATE__.logos) {
             if (window.__TEHZIB_INITIAL_SERVER_STATE__.logos.light) TEHZIB_LOGOS.light = window.__TEHZIB_INITIAL_SERVER_STATE__.logos.light;
             if (window.__TEHZIB_INITIAL_SERVER_STATE__.logos.dark) TEHZIB_LOGOS.dark = window.__TEHZIB_INITIAL_SERVER_STATE__.logos.dark;
@@ -3677,94 +3654,392 @@ const IMG = {
         }
       }
 
-      ERP_DB = createDefaultErpDatabase();
+      ERP_DB = defDb;
       ensureSixStaffAndRoles(ERP_DB);
       window.ERP_DB = ERP_DB;
     }
 
     function getCleanStaffId(st) {
       if (!st) return "";
-      const val = String(st.staffId !== undefined ? st.staffId : "").trim();
-      if (val && !/^stf-/i.test(val)) return val;
+      const val = String(st.staffId !== undefined && st.staffId !== null ? st.staffId : "").trim();
+      if (val && !/^stf-/i.test(val) && !/^staff_/i.test(val)) return val;
       const fallback = String(st.id || "").trim();
       if (fallback && !/^stf-/i.test(fallback) && !/^staff_/i.test(fallback)) return fallback;
       return "";
     }
 
-    function ensureSixStaffAndRoles(db) {
-      if (!db) return;
-      db.staffRoles = [...OPERATIONAL_ROLES];
-      if (!Array.isArray(db.staffMembers) || db.staffMembers.length === 0) {
-        db.staffMembers = JSON.parse(JSON.stringify(SEED_STAFF_MEMBERS));
-      } else {
-        // Scrub any legacy STF-* IDs from all existing staff members without creating duplicate internal IDs
-        const usedIds = new Set();
-        db.staffMembers.forEach(s => {
-          if (s.id && !/^stf-/i.test(String(s.id))) usedIds.add(s.id);
-        });
-        db.staffMembers.forEach((s, i) => {
-          if (s.staffId && /^stf-/i.test(String(s.staffId))) {
-            s.staffId = "";
-          }
-          if (s.id && /^stf-/i.test(String(s.id))) {
-            const emailLow = (s.email || "").trim().toLowerCase();
-            const matchedByEmail = SEED_STAFF_MEMBERS.find(sd => sd.email.toLowerCase() === emailLow);
-            let candidate = matchedByEmail ? matchedByEmail.id : "";
-            if (!candidate || usedIds.has(candidate)) {
-              const cleanCustom = String(s.staffId || "").trim().replace(/[^a-zA-Z0-9_-]/g, "");
-              candidate = cleanCustom ? `staff_${cleanCustom}` : `staff_row_${i + 1}`;
-              while (usedIds.has(candidate)) {
-                candidate = `staff_row_${i + 1}_${usedIds.size + 1}`;
-              }
-            }
-            usedIds.add(candidate);
-            s.id = candidate;
-          }
-          if (s.staffId === undefined) {
-            s.staffId = (!/^staff_/i.test(String(s.id || "")) && !/^stf-/i.test(String(s.id || ""))) ? String(s.id || "") : "";
-          }
-        });
+    function getStaffInitials(name, fallback = "ST") {
+      const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+      if (!parts.length) return fallback;
+      return parts.map(w => w[0]).join("").slice(0, 2).toUpperCase();
+    }
 
-        // Guarantee all 6 operational staff members exist with their profiles
-        SEED_STAFF_MEMBERS.forEach(seedSt => {
-          let idx = db.staffMembers.findIndex(
-            s => (s.email || "").toLowerCase() === seedSt.email.toLowerCase() || s.id === seedSt.id
-          );
-          if (idx === -1) {
-            idx = db.staffMembers.findIndex(s => s.role === seedSt.role);
-          }
-          if (idx === -1) {
-            db.staffMembers.push(JSON.parse(JSON.stringify(seedSt)));
-          } else {
-            const cur = db.staffMembers[idx];
-            if (!cur.id || /^stf-/i.test(String(cur.id))) cur.id = seedSt.id;
-            if (cur.staffId === undefined || /^stf-/i.test(String(cur.staffId))) cur.staffId = "";
-            cur.name = cur.name || seedSt.name;
-            cur.email = cur.email || seedSt.email;
-            cur.role = cur.role || seedSt.role;
-            cur.phone = cur.phone || seedSt.phone;
-            cur.dept = cur.dept || seedSt.dept;
-            cur.shift = cur.shift || seedSt.shift;
-            cur.avatar = cur.avatar || seedSt.avatar;
-            cur.status = cur.status || seedSt.status || "Active";
-            cur.password = cur.password || "Tehzib@2027";
-            if (!cur.accesses || cur.accesses.length === 0 || cur.accesses.length < seedSt.accesses.length) {
-              cur.accesses = [...seedSt.accesses];
-            }
+    function getMergedStaffRoles(db) {
+      const targetDb = db || ERP_DB || {};
+      const seen = new Set();
+      const roles = [];
+      const addRole = r => {
+        const clean = String(r || "").trim();
+        if (!clean || clean === "__ADD_NEW__") return;
+        const key = clean.toLowerCase();
+        if (!seen.has(key)) {
+          seen.add(key);
+          roles.push(clean);
+        }
+      };
+      (OPERATIONAL_ROLES || []).forEach(addRole);
+      (targetDb.staffRoles || []).forEach(addRole);
+      (targetDb.staffMembers || []).forEach(st => addRole(st?.role));
+      return roles;
+    }
+
+    function findStaffRecord(staffList, ref) {
+      if (!Array.isArray(staffList) || !staffList.length || !ref) return null;
+      const needle = String(ref).trim();
+      if (!needle) return null;
+      const lower = needle.toLowerCase();
+      return (
+        staffList.find(s => s && (s.id === needle || s.dbId === needle)) ||
+        staffList.find(s => s && ((s.email || "").toLowerCase() === lower || (s.loginId || "").toLowerCase() === lower)) ||
+        staffList.find(s => {
+          const cid = getCleanStaffId(s);
+          return cid && cid.toLowerCase() === lower;
+        }) ||
+        staffList.find(s => {
+          const legacySlug = "staff_" + String(s?.staffId || "").trim();
+          return s?.staffId && legacySlug.toLowerCase() === lower;
+        }) ||
+        null
+      );
+    }
+
+    function doesExpenseMatchStaff(ex, st) {
+      if (!ex || !st) return false;
+      const nameLower = String(st.name || "").trim().toLowerCase();
+      const exName = String(ex.responsibleStaffName || ex.staff || ex.createdBy || "").trim().toLowerCase();
+      if (nameLower && exName && nameLower === exName) return true;
+      const exId = String(ex.responsibleStaffId || "").trim().toLowerCase();
+      if (!exId) return false;
+      const candidates = [st.id, st.dbId, getCleanStaffId(st), st.email, st.loginId]
+        .filter(Boolean)
+        .map(v => String(v).trim().toLowerCase());
+      return candidates.includes(exId);
+    }
+
+    function doesPaymentMatchStaff(p, st) {
+      if (!p || !st) return false;
+      const nameLower = String(st.name || "").trim().toLowerCase();
+      if (!nameLower) return false;
+      return (
+        String(p.advanceByStaff || "").trim().toLowerCase() === nameLower ||
+        String(p.dueByStaff || "").trim().toLowerCase() === nameLower ||
+        String(p.staff || "").trim().toLowerCase() === nameLower
+      );
+    }
+
+    function isStaffIdDuplicate(candidateId, excludeStaff) {
+      const clean = String(candidateId || "").trim().toLowerCase();
+      if (!clean) return null;
+      const staffList = ERP_DB?.staffMembers || [];
+      return staffList.find(s => {
+        if (!s || (excludeStaff && s.id === excludeStaff.id)) return false;
+        const cid = getCleanStaffId(s).toLowerCase();
+        return (cid && cid === clean) || String(s.id || "").trim().toLowerCase() === clean;
+      }) || null;
+    }
+
+    function isStaffEmailDuplicate(candidateEmail, excludeStaff) {
+      const clean = String(candidateEmail || "").trim().toLowerCase();
+      if (!clean) return null;
+      const staffList = ERP_DB?.staffMembers || [];
+      return staffList.find(s => {
+        if (!s || (excludeStaff && s.id === excludeStaff.id)) return false;
+        return String(s.email || "").trim().toLowerCase() === clean;
+      }) || null;
+    }
+
+    const STAFF_EMPLOYMENT_STATUS_OPTIONS = [
+      "Internship",
+      "Probation",
+      "Permanent",
+      "Notice Period",
+      "Contractual"
+    ];
+
+    const STAFF_WORKING_SHIFT_OPTIONS = [
+      "Full-Time (Day Shift)",
+      "Full-Time (Night Shift)",
+      "Part-Time (Day Shift)",
+      "Part-Time (Night Shift)",
+      "Remote (Day Shift)",
+      "Remote (Night Shift)"
+    ];
+
+    function normalizeStaffEmploymentStatus(raw) {
+      const clean = String(raw || "").trim();
+      if (!clean) return "Permanent";
+      const lower = clean.toLowerCase().replace(/[\s_-]+/g, " ");
+      if (lower === "internship") return "Internship";
+      if (lower === "probation") return "Probation";
+      if (lower === "permanent" || lower === "active" || lower === "active on duty") return "Permanent";
+      if (lower === "notice period") return "Notice Period";
+      if (lower === "contractual") return "Contractual";
+      if (lower === "on leave") return "On Leave";
+      if (lower === "inactive") return "Inactive";
+      return "Permanent";
+    }
+
+    function normalizeStaffWorkingShift(raw) {
+      const clean = String(raw || "").trim();
+      if (!clean) return "Full-Time (Day Shift)";
+      const exact = STAFF_WORKING_SHIFT_OPTIONS.find(opt => opt.toLowerCase() === clean.toLowerCase());
+      if (exact) return exact;
+      const lower = clean.toLowerCase();
+      const isNight = lower.includes("night");
+      if (lower.includes("remote")) return isNight ? "Remote (Night Shift)" : "Remote (Day Shift)";
+      if (lower.includes("part")) return isNight ? "Part-Time (Night Shift)" : "Part-Time (Day Shift)";
+      return isNight ? "Full-Time (Night Shift)" : "Full-Time (Day Shift)";
+    }
+
+    function getStaffStatusBadgeClass(rawStatus) {
+      const norm = normalizeStaffEmploymentStatus(rawStatus);
+      if (norm === "Permanent") return "badge-green";
+      if (norm === "Probation" || norm === "Contractual") return "badge-blue";
+      if (norm === "Internship") return "badge-orange";
+      return "badge-rose";
+    }
+
+    function normalizeStaffRecord(raw, fallbackIdx = 0) {
+      const name = String(raw?.name || "").trim() || "Team Member";
+      const cleanCustomId = getCleanStaffId(raw);
+      const id = String(raw?.id || raw?.dbId || (cleanCustomId ? "staff_" + cleanCustomId : "staff_" + (fallbackIdx + 1))).trim();
+      const role = String(raw?.role || "Operations Staff").trim() || "Operations Staff";
+      const status = normalizeStaffEmploymentStatus(raw?.status);
+      const accesses = Array.isArray(raw?.accesses) && raw.accesses.length
+        ? [...raw.accesses]
+        : [...(ROLE_DEFAULT_ACCESS_MAP[role] || ["Dashboard & BI"])];
+      const rawAvatar = String(raw?.avatar || "").trim().toUpperCase();
+      const avatar = (rawAvatar && rawAvatar !== "ST") ? rawAvatar.slice(0, 2) : getStaffInitials(name);
+      return {
+        ...raw,
+        id,
+        dbId: raw?.dbId || (/^stf-|^staff_/i.test(id) ? id : undefined),
+        staffId: cleanCustomId,
+        name,
+        phone: String(raw?.phone || "").trim(),
+        email: String(raw?.email || "").trim(),
+        role,
+        dept: String(raw?.dept || "Operations").trim() || "Operations",
+        shift: normalizeStaffWorkingShift(raw?.shift),
+        avatar,
+        status,
+        accesses
+      };
+    }
+
+    function cascadeStaffProfileUpdate(updatedStaff, prevName, prevEmail, prevRole, prevCustomId) {
+      if (!updatedStaff || !ERP_DB) return;
+      const newCustomId = getCleanStaffId(updatedStaff);
+      const oldNames = [prevName].filter(Boolean).map(v => String(v).trim().toLowerCase());
+      const oldIds = [updatedStaff.id, updatedStaff.dbId, prevCustomId, prevEmail]
+        .filter(Boolean)
+        .map(v => String(v).trim().toLowerCase());
+
+      if (Array.isArray(ERP_DB.expenses)) {
+        ERP_DB.expenses.forEach(ex => {
+          const exName = String(ex.responsibleStaffName || ex.staff || "").trim().toLowerCase();
+          const exId = String(ex.responsibleStaffId || "").trim().toLowerCase();
+          if ((exName && oldNames.includes(exName)) || (exId && oldIds.includes(exId))) {
+            ex.responsibleStaffName = updatedStaff.name;
+            ex.responsibleStaffRole = updatedStaff.role;
+            ex.responsibleStaffId = newCustomId || updatedStaff.id;
+            if (ex.staff) ex.staff = updatedStaff.name;
           }
         });
       }
+
+      if (Array.isArray(ERP_DB.paymentsLog)) {
+        ERP_DB.paymentsLog.forEach(p => {
+          if (p.advanceByStaff && oldNames.includes(String(p.advanceByStaff).trim().toLowerCase())) {
+            p.advanceByStaff = updatedStaff.name;
+          }
+          if (p.dueByStaff && oldNames.includes(String(p.dueByStaff).trim().toLowerCase())) {
+            p.dueByStaff = updatedStaff.name;
+          }
+          if (p.staff && oldNames.includes(String(p.staff).trim().toLowerCase())) {
+            p.staff = updatedStaff.name;
+          }
+        });
+      }
+
+      ["wtExpFilterStaff", "wtPayFilterStaff"].forEach(inputId => {
+        const el = document.getElementById(inputId);
+        if (el && prevName && el.value.trim().toLowerCase() === prevName.trim().toLowerCase()) {
+          el.value = updatedStaff.name;
+        }
+      });
+
+      const sess = window.__erpSessionObj;
+      const isEditingActiveAdmin = sess && (
+        sess.staffId === updatedStaff.id ||
+        sess.staffId === updatedStaff.dbId ||
+        (prevEmail && (sess.id || "").toLowerCase() === String(prevEmail).trim().toLowerCase()) ||
+        (updatedStaff.email && (sess.id || "").toLowerCase() === updatedStaff.email.toLowerCase()) ||
+        (prevName && sess.name === prevName)
+      );
+
+      if (isEditingActiveAdmin) {
+        window.__erpSessionObj = {
+          ...sess,
+          staffId: updatedStaff.id,
+          customStaffId: newCustomId,
+          id: updatedStaff.email,
+          name: updatedStaff.name,
+          phone: updatedStaff.phone,
+          role: updatedStaff.role,
+          dept: updatedStaff.dept,
+          shift: updatedStaff.shift,
+          status: updatedStaff.status,
+          avatar: updatedStaff.avatar || getStaffInitials(updatedStaff.name),
+          accesses: [...getStaffAccessList(updatedStaff)]
+        };
+        try {
+          localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(window.__erpSessionObj));
+        } catch (err) {}
+        updateAdminProfileTopbar();
+        renderAdminProfileDropdown();
+        updateSidebarRbacState();
+      }
+    }
+
+    window.__tehzibApplyServerStaffSync = function (serverStaffList, serverRoles) {
+      if (!ERP_DB || !Array.isArray(serverStaffList) || !serverStaffList.length) return;
+      const pendingDeleted = new Set(
+        (Array.isArray(ERP_DB.__deletedStaffIds) ? ERP_DB.__deletedStaffIds : [])
+          .map(x => String(x || "").trim())
+          .filter(Boolean)
+      );
+      const filteredServerList = pendingDeleted.size
+        ? serverStaffList.filter(srv => !pendingDeleted.has(String(srv.id || "").trim()) && !pendingDeleted.has(String(srv.dbId || "").trim()))
+        : serverStaffList;
+      if (!filteredServerList.length) return;
+
+      const existingList = Array.isArray(ERP_DB.staffMembers) ? ERP_DB.staffMembers : [];
+      const merged = filteredServerList.map((srv, idx) => {
+        const localMatch = existingList.find(loc =>
+          (loc.dbId && loc.dbId === srv.id) ||
+          loc.id === srv.id ||
+          ((loc.email || "").toLowerCase() === (srv.email || "").toLowerCase())
+        );
+        return normalizeStaffRecord({
+          ...srv,
+          dbId: srv.id,
+          shift: srv.shift || (localMatch && localMatch.shift) || "Full-Time (Day Shift)",
+          avatar: (localMatch && localMatch.avatar && localMatch.avatar !== "ST") ? localMatch.avatar : srv.avatar
+        }, idx);
+      });
+      ERP_DB.staffMembers = merged;
+      if (Array.isArray(serverRoles)) {
+        ERP_DB.staffRoles = getMergedStaffRoles({ staffRoles: [...(ERP_DB.staffRoles || []), ...serverRoles], staffMembers: merged });
+      }
+      if (window.__erpSessionObj) {
+        const active = findStaffRecord(merged, window.__erpSessionObj.staffId) || findStaffRecord(merged, window.__erpSessionObj.id);
+        if (active) {
+          window.__erpSessionObj.staffId = active.id;
+          window.__erpSessionObj.customStaffId = getCleanStaffId(active);
+        }
+      }
+      try {
+        localStorage.setItem(ERP_STORAGE_KEY, JSON.stringify(ERP_DB));
+      } catch (e) {}
+    };
+
+    function ensureSixStaffAndRoles(db) {
+      if (!db) return;
+      const pendingDeleted = new Set(
+        (Array.isArray(db.__deletedStaffIds) ? db.__deletedStaffIds : [])
+          .map(x => String(x || "").trim())
+          .filter(Boolean)
+      );
+      const srvDb = (window.__TEHZIB_INITIAL_SERVER_STATE__ && window.__TEHZIB_INITIAL_SERVER_STATE__.erpDb)
+        ? window.__TEHZIB_INITIAL_SERVER_STATE__.erpDb
+        : null;
+      const localList = (Array.isArray(db.staffMembers) ? db.staffMembers : [])
+        .filter(loc => !pendingDeleted.has(String(loc?.id || "").trim()) && !pendingDeleted.has(String(loc?.dbId || "").trim()));
+      const rawSrvList = Array.isArray(srvDb?.staffMembers) && srvDb.staffMembers.length ? srvDb.staffMembers : null;
+      const srvList = rawSrvList
+        ? rawSrvList.filter(srv => !pendingDeleted.has(String(srv?.id || "").trim()) && !pendingDeleted.has(String(srv?.dbId || "").trim()))
+        : null;
+
+      let sourceList;
+      if (srvList && srvList.length) {
+        sourceList = srvList.map((srv, idx) => {
+          const localMatch = localList.find(loc =>
+            (loc.dbId && loc.dbId === srv.id) ||
+            loc.id === srv.id ||
+            ((loc.email || "").trim().toLowerCase() === (srv.email || "").trim().toLowerCase())
+          );
+          return normalizeStaffRecord({
+            ...srv,
+            dbId: srv.id,
+            shift: srv.shift || (localMatch && localMatch.shift) || "Full-Time (Day Shift)",
+            avatar: (localMatch && localMatch.avatar && localMatch.avatar !== "ST") ? localMatch.avatar : srv.avatar
+          }, idx);
+        });
+      } else if (localList.length > 0) {
+        sourceList = localList.map((loc, idx) => normalizeStaffRecord(loc, idx));
+      } else {
+        sourceList = SEED_STAFF_MEMBERS.map((s, idx) => normalizeStaffRecord(JSON.parse(JSON.stringify(s)), idx));
+      }
+
+      // Guarantee zero duplicate ids and zero duplicate emails in memory
+      const usedIds = new Set();
+      const usedEmails = new Set();
+      const deduped = [];
+      sourceList.forEach((st, idx) => {
+        const emailKey = String(st.email || "").trim().toLowerCase();
+        if (emailKey && usedEmails.has(emailKey)) return;
+        if (emailKey) usedEmails.add(emailKey);
+
+        let safeId = st.id;
+        if (!safeId || usedIds.has(safeId)) {
+          safeId = `staff_unique_${idx + 1}_${usedIds.size + 1}`;
+        }
+        usedIds.add(safeId);
+        st.id = safeId;
+        deduped.push(st);
+      });
+
+      db.staffMembers = deduped;
+      db.staffRoles = getMergedStaffRoles({
+        staffRoles: [
+          ...(Array.isArray(srvDb?.staffRoles) ? srvDb.staffRoles : []),
+          ...(Array.isArray(db.staffRoles) ? db.staffRoles : [])
+        ],
+        staffMembers: db.staffMembers
+      });
+
       if (Array.isArray(db.expenses)) {
-        db.expenses.forEach(ex => {
-          if (ex.responsibleStaffId && /^stf-/i.test(String(ex.responsibleStaffId))) {
-            const matched = (db.staffMembers || []).find(s => s.name === ex.responsibleStaffName);
-            ex.responsibleStaffId = matched ? (getCleanStaffId(matched) || matched.id) : "";
+        db.expenses.forEach((ex, idx) => {
+          if (!ex.details) ex.details = ex.title + " — Verified voucher entry at Uttara Sector 12 Hub";
+          const matched =
+            findStaffRecord(db.staffMembers, ex.responsibleStaffId) ||
+            db.staffMembers.find(s => s.name === ex.responsibleStaffName);
+          if (matched) {
+            ex.responsibleStaffId = getCleanStaffId(matched) || matched.id;
+            ex.responsibleStaffName = matched.name;
+            ex.responsibleStaffRole = matched.role;
+          } else if (!ex.responsibleStaffName && db.staffMembers.length) {
+            const fallbackStaff = db.staffMembers[idx % db.staffMembers.length];
+            ex.responsibleStaffId = getCleanStaffId(fallbackStaff) || fallbackStaff.id;
+            ex.responsibleStaffName = fallbackStaff.name;
+            ex.responsibleStaffRole = fallbackStaff.role;
           }
         });
       }
     }
 
-    function saveErpDatabase() {
+    function saveErpDatabase(syncOptions) {
       window.ERP_DB = ERP_DB;
       try {
         localStorage.setItem(ERP_STORAGE_KEY, JSON.stringify(ERP_DB));
@@ -3776,8 +4051,9 @@ const IMG = {
         window.__tehzibScheduleServerSync({
           erpDb: ERP_DB,
           logos: TEHZIB_LOGOS,
-          notifications: state.notifications
-        });
+          notifications: state.notifications,
+          deletedStaffIds: Array.isArray(ERP_DB.__deletedStaffIds) ? ERP_DB.__deletedStaffIds : undefined
+        }, syncOptions);
       }
     }
 
@@ -3795,32 +4071,83 @@ const IMG = {
     // ========================================================================
     // ADMIN AUTHENTICATION GATE & OPERATIONAL PROFILE FUNCTIONS
     // ========================================================================
+    const PERMISSION_KEY_TO_LABEL = {
+      dashboard: "Dashboard & BI",
+      products: "Product & Catalogue",
+      inventory: "Inventory & Stock",
+      procurement: "Suppliers & PO",
+      orders: "Orders & POS",
+      crm: "Customer CRM",
+      finance: "Expenses & Payments",
+      cms: "Storefront CMS",
+      team: "Working Team Admin"
+    };
+
+    function convertServerPermissionsToLabels(perms, roleName) {
+      if (!Array.isArray(perms) || !perms.length) {
+        return ROLE_DEFAULT_ACCESS_MAP[roleName]
+          ? [...ROLE_DEFAULT_ACCESS_MAP[roleName]]
+          : ["Dashboard & BI"];
+      }
+      if (perms.includes("*")) {
+        return [...ALL_ERP_MODULES];
+      }
+      const mapped = perms
+        .map(p => PERMISSION_KEY_TO_LABEL[p] || (ALL_ERP_MODULES.includes(p) ? p : null))
+        .filter(Boolean);
+      return mapped.length ? Array.from(new Set(mapped)) : ["Dashboard & BI"];
+    }
+
+    function getStaffAccessList(staff) {
+      if (!staff) return [];
+      if (Array.isArray(staff.accesses) && staff.accesses.length) {
+        return staff.accesses;
+      }
+      if (staff.role && ROLE_DEFAULT_ACCESS_MAP[staff.role]) {
+        return [...ROLE_DEFAULT_ACCESS_MAP[staff.role]];
+      }
+      return ["Dashboard & BI"];
+    }
+
+    function hasActiveModuleAccess(moduleName, staffOverride) {
+      if (!window.__erpAdminAuthenticated) return false;
+      const staff = staffOverride || getActiveAdminStaffRecord();
+      if (!staff || staff.status === "Inactive") return false;
+      if (!moduleName) return true;
+      return getStaffAccessList(staff).includes(moduleName);
+    }
+
+    function hasWorkingTeamAccess(staffOverride) {
+      return hasActiveModuleAccess("Working Team Admin", staffOverride);
+    }
+
+    function resolvePermittedErpView(preferredViewKey, staffOverride) {
+      const staff = staffOverride || getActiveAdminStaffRecord();
+      if (!staff || staff.status === "Inactive") return null;
+      const accesses = getStaffAccessList(staff);
+      const preferredMod = VIEW_KEY_TO_MODULE[preferredViewKey];
+      if (preferredViewKey && preferredMod && accesses.includes(preferredMod) && document.getElementById("view-" + preferredViewKey)) {
+        return preferredViewKey;
+      }
+      const firstMod = ALL_ERP_MODULES.find(m => accesses.includes(m));
+      return (firstMod && MODULE_TO_VIEW_KEY[firstMod]) || "dashboard";
+    }
+
     function getActiveAdminStaffRecord() {
-      const sess = window.__erpSessionObj || {};
+      const sess = window.__erpSessionObj;
+      if (!sess || (!sess.id && !sess.staffId && !sess.customStaffId && !sess.name)) {
+        return null;
+      }
       const staffList = (ERP_DB && Array.isArray(ERP_DB.staffMembers) && ERP_DB.staffMembers.length)
         ? ERP_DB.staffMembers
         : SEED_STAFF_MEMBERS;
 
-      let found = null;
-      if (sess.staffId && !/^stf-/i.test(String(sess.staffId))) {
-        found = staffList.find(s => s.id === sess.staffId || getCleanStaffId(s) === sess.staffId);
-      }
-      if (!found && sess.id) {
-        found = staffList.find(s =>
-          (s.email || "").toLowerCase() === sess.id.toLowerCase() ||
-          (s.id || "").toLowerCase() === sess.id.toLowerCase() ||
-          getCleanStaffId(s).toLowerCase() === sess.id.toLowerCase()
-        );
-      }
-      if (!found && sess.name) {
-        found = staffList.find(s => (s.name || "").toLowerCase() === sess.name.toLowerCase());
-      }
-      if (!found && staffList.length > 0) {
-        found = staffList[0];
-      }
-      if (!found) {
-        found = SEED_STAFF_MEMBERS[0];
-      }
+      const found =
+        (sess.staffId && findStaffRecord(staffList, sess.staffId)) ||
+        (sess.id && findStaffRecord(staffList, sess.id)) ||
+        (sess.customStaffId && findStaffRecord(staffList, sess.customStaffId)) ||
+        (sess.name && staffList.find(s => (s.name || "").toLowerCase() === sess.name.toLowerCase())) ||
+        null;
       return found;
     }
 
@@ -3832,10 +4159,11 @@ const IMG = {
       const staffIdBadgeEl = document.getElementById("activeAdminStaffIdBadge");
       const roleEl = document.getElementById("activeAdminRole");
 
-      const accesses = Array.isArray(activeStaff.accesses) ? activeStaff.accesses : (ROLE_DEFAULT_ACCESS_MAP[activeStaff.role] || ALL_ERP_MODULES);
+      const accesses = getStaffAccessList(activeStaff);
       const customId = getCleanStaffId(activeStaff);
+      const avatarText = (activeStaff.avatar && activeStaff.avatar !== "ST") ? activeStaff.avatar : getStaffInitials(activeStaff.name);
 
-      if (avatarEl) avatarEl.textContent = activeStaff.avatar || activeStaff.name.slice(0, 2).toUpperCase();
+      if (avatarEl) avatarEl.textContent = avatarText;
       if (nameEl) nameEl.textContent = activeStaff.name;
       if (staffIdBadgeEl) {
         staffIdBadgeEl.textContent = customId;
@@ -3852,16 +4180,16 @@ const IMG = {
 
       // Section A: Active Admin Identity Header
       const ddAvatar = document.getElementById("ddAdminAvatar");
-      if (ddAvatar) ddAvatar.textContent = activeStaff.avatar || "TA";
+      if (ddAvatar) ddAvatar.textContent = (activeStaff.avatar && activeStaff.avatar !== "ST") ? activeStaff.avatar : getStaffInitials(activeStaff.name);
 
       const ddFullName = document.getElementById("ddAdminFullName");
       if (ddFullName) ddFullName.textContent = activeStaff.name;
 
       const ddStatusBadge = document.getElementById("ddAdminStatusBadge");
       if (ddStatusBadge) {
-        const isLeave = activeStaff.status === "On Leave";
-        ddStatusBadge.textContent = isLeave ? "On Leave" : "Active on Duty";
-        ddStatusBadge.className = `badge ${isLeave ? "badge-amber" : "badge-green"}`;
+        const normStatus = normalizeStaffEmploymentStatus(activeStaff.status);
+        ddStatusBadge.textContent = normStatus;
+        ddStatusBadge.className = `badge ${getStaffStatusBadgeClass(normStatus)}`;
       }
 
       const ddRoleText = document.getElementById("ddAdminRoleText");
@@ -3876,15 +4204,12 @@ const IMG = {
       }
 
       const ddDeptText = document.getElementById("ddAdminDeptText");
-      if (ddDeptText) ddDeptText.textContent = `${activeStaff.dept || "Executive & Strategy"} • ${activeStaff.shift || "Full-Time"}`;
+      if (ddDeptText) ddDeptText.textContent = `${activeStaff.dept || "Executive & Strategy"} • ${normalizeStaffWorkingShift(activeStaff.shift)}`;
+      const ddFooterEl = document.querySelector("#erpAdminProfileDropdown .erp-dd-footer-grid");
+      if (ddFooterEl) ddFooterEl.style.display = hasWorkingTeamAccess(activeStaff) ? "" : "none";
 
       // Section B: 3 Live Mini-KPI Cards (Dynamic Financial Accountability)
-      const myExps = expenses.filter(e =>
-        e.responsibleStaffName === activeStaff.name ||
-        e.responsibleStaffId === activeStaff.id ||
-        e.staff === activeStaff.name ||
-        e.createdBy === activeStaff.name
-      );
+      const myExps = expenses.filter(e => doesExpenseMatchStaff(e, activeStaff));
       const myExpTotal = myExps.reduce((s, e) => s + (Number(e.amount) || 0), 0);
       const expValEl = document.getElementById("ddAdminExpVal");
       if (expValEl) expValEl.textContent = formatBDT(myExpTotal);
@@ -3933,22 +4258,18 @@ const IMG = {
 
     function updateSidebarRbacState() {
       const activeStaff = getActiveAdminStaffRecord();
-      const lockToggle = document.getElementById("rbacStrictLockToggle");
-      const strictLock = lockToggle ? lockToggle.checked : true;
-      const accesses = (activeStaff && Array.isArray(activeStaff.accesses))
-        ? activeStaff.accesses
-        : (ROLE_DEFAULT_ACCESS_MAP[activeStaff?.role] || ALL_ERP_MODULES);
+      const accesses = activeStaff ? getStaffAccessList(activeStaff) : [];
 
       document.querySelectorAll("#erpSidebar .erp-nav-btn").forEach(btn => {
         const navKey = btn.getAttribute("data-erp-nav");
         if (!navKey) return;
         const modName = VIEW_KEY_TO_MODULE[navKey];
         if (!modName) return;
-        const isAllowed = accesses.includes(modName);
+        const isAllowed = Boolean(activeStaff && accesses.includes(modName));
 
         let lockPill = btn.querySelector(".sidebar-lock-pill");
 
-        if (!isAllowed && strictLock) {
+        if (!isAllowed) {
           btn.classList.add("rbac-locked");
           btn.setAttribute("title", `🔒 Role Restricted for ${activeStaff?.role || 'current profile'}`);
           if (!lockPill) {
@@ -3971,307 +4292,7 @@ const IMG = {
       });
     }
 
-    function switchActiveErpStaffProfile(staffId) {
-      closeAdminProfileDropdown();
-      const staffList = (ERP_DB && Array.isArray(ERP_DB.staffMembers) && ERP_DB.staffMembers.length)
-        ? ERP_DB.staffMembers
-        : SEED_STAFF_MEMBERS;
-      const staff = staffList.find(s => s.id === staffId);
-      if (!staff) {
-        showToast(`Staff profile "${staffId}" not found`);
-        return;
-      }
-      const accesses = Array.isArray(staff.accesses) ? staff.accesses : (ROLE_DEFAULT_ACCESS_MAP[staff.role] || ALL_ERP_MODULES);
-      const sessionObj = {
-        staffId: staff.id,
-        id: staff.email,
-        name: staff.name,
-        phone: staff.phone,
-        role: staff.role,
-        dept: staff.dept,
-        shift: staff.shift,
-        status: staff.status || "Active",
-        avatar: staff.avatar || "TA",
-        accesses
-      };
-      window.__erpSessionObj = sessionObj;
-      try {
-        localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(sessionObj));
-      } catch (e) {}
-
-      updateAdminProfileTopbar();
-      renderAdminProfileDropdown();
-      updateSidebarRbacState();
-
-      // If currently active view is not permitted for the newly switched staff and strict lock is on:
-      const activeViewEl = document.querySelector(".erp-view.active");
-      if (activeViewEl) {
-        const curViewKey = activeViewEl.id.replace("view-", "");
-        const curModuleName = VIEW_KEY_TO_MODULE[curViewKey];
-        const strictLock = document.getElementById("rbacStrictLockToggle")?.checked ?? true;
-        if (strictLock && curModuleName && !accesses.includes(curModuleName)) {
-          const firstPermitted = ALL_ERP_MODULES.find(m => accesses.includes(m));
-          if (firstPermitted && MODULE_TO_VIEW_KEY[firstPermitted]) {
-            switchErpView(MODULE_TO_VIEW_KEY[firstPermitted]);
-          } else {
-            switchErpView("dashboard");
-          }
-        }
-      }
-
-      // Update default responsible staff across forms
-      const expStaffEl = document.getElementById("expResponsibleStaff");
-      if (expStaffEl) expStaffEl.value = staff.name;
-      const spAdvStaffEl = document.getElementById("spAdvanceStaff");
-      if (spAdvStaffEl) spAdvStaffEl.value = staff.name;
-      const wtPayStaffEl = document.getElementById("wtPayAdvStaff");
-      if (wtPayStaffEl) wtPayStaffEl.value = staff.name;
-
-      renderWorkingTeamModule();
-      showToast(`Active profile switched to: ${staff.name} (${staff.role})`);
-    }
-
-    let currentModalStaffId = null;
-
-    function openAdminProfileModal(staffId) {
-      closeAdminProfileDropdown();
-      const staffList = (ERP_DB && Array.isArray(ERP_DB.staffMembers) && ERP_DB.staffMembers.length)
-        ? ERP_DB.staffMembers
-        : SEED_STAFF_MEMBERS;
-      const targetId = staffId || window.__erpSessionObj?.staffId || "staff_tahmid";
-      const st = staffList.find(s => s.id === targetId || getCleanStaffId(s) === targetId) || staffList[0];
-      if (!st) return;
-
-      currentModalStaffId = st.id;
-      const modal = document.getElementById("adminProfileModal");
-      if (!modal) return;
-
-      const customId = getCleanStaffId(st);
-      const apModalStaffId = document.getElementById("apModalStaffId");
-      if (apModalStaffId) {
-        apModalStaffId.textContent = customId ? `ID: ${customId}` : "";
-        apModalStaffId.style.display = customId ? "inline-block" : "none";
-      }
-
-      // Quick Switcher Pills: render all staff pills without STF-* showcasing
-      const quickPillsEl = document.getElementById("modalStaffQuickPills");
-      if (quickPillsEl) {
-        quickPillsEl.innerHTML = staffList.map(s => {
-          const isSel = s.id === st.id;
-          const cid = getCleanStaffId(s);
-          return `<button type="button" class="btn btn-xs ${isSel ? 'btn-primary' : 'btn-secondary'}" onclick="openAdminProfileModal('${s.id}')" style="font-size:11px;padding:3px 10px;">${escapeHtmlText(s.name.split(" ")[0])}${cid ? ' (' + escapeHtmlText(cid) + ')' : ''}</button>`;
-        }).join("");
-      }
-
-      // Fill editable input fields
-      const editIdEl = document.getElementById("apStaffEditId");
-      if (editIdEl) editIdEl.value = st.id;
-      const customIdEl = document.getElementById("apStaffCustomId");
-      if (customIdEl) customIdEl.value = customId;
-      const nameEl = document.getElementById("apStaffName");
-      if (nameEl) nameEl.value = st.name || "";
-      const emailEl = document.getElementById("apStaffEmail");
-      if (emailEl) emailEl.value = st.email || "";
-      const phoneEl = document.getElementById("apStaffPhone");
-      if (phoneEl) phoneEl.value = st.phone || "";
-
-      const roleSelect = document.getElementById("apStaffRole");
-      if (roleSelect) {
-        roleSelect.innerHTML = OPERATIONAL_ROLES.map(r => `<option value="${escapeHtmlText(r)}">${escapeHtmlText(r)}</option>`).join("");
-        roleSelect.value = st.role || OPERATIONAL_ROLES[0];
-      }
-
-      const deptEl = document.getElementById("apStaffDept");
-      if (deptEl) deptEl.value = st.dept || "Operations";
-      const shiftEl = document.getElementById("apStaffShift");
-      if (shiftEl) shiftEl.value = st.shift || "09:00 AM – 06:00 PM";
-      const avatarEl = document.getElementById("apStaffAvatar");
-      if (avatarEl) avatarEl.value = st.avatar || "ST";
-      const passEl = document.getElementById("apStaffPassword");
-      if (passEl) passEl.value = st.password || "Tehzib@2027";
-      const statusEl = document.getElementById("apStaffStatus");
-      if (statusEl) statusEl.value = st.status || "Active";
-
-      renderModalAccessCheckboxes(st.accesses || ROLE_DEFAULT_ACCESS_MAP[st.role] || ALL_ERP_MODULES);
-      renderModalPersonalLedger(st);
-
-      modal.style.display = "flex";
-    }
-
-    function closeAdminProfileModal() {
-      const modal = document.getElementById("adminProfileModal");
-      if (modal) modal.style.display = "none";
-    }
-
-    function renderModalAccessCheckboxes(currentAccesses) {
-      const wrap = document.getElementById("apAccessCheckboxes");
-      if (!wrap) return;
-      const accSet = new Set(currentAccesses || []);
-      wrap.innerHTML = ALL_ERP_MODULES.map((m, idx) => {
-        const isChecked = accSet.has(m);
-        const cbId = `apCbMod_${idx}`;
-        return `
-          <label for="${cbId}" style="display:flex;align-items:center;gap:6px;font-size:11.5px;cursor:pointer;padding:5px 8px;border-radius:6px;background:var(--bg-elevated);border:1px solid var(--border-color);">
-            <input type="checkbox" id="${cbId}" value="${escapeHtmlText(m)}" ${isChecked ? 'checked' : ''} style="margin:0;" />
-            <span style="font-weight:600;">${escapeHtmlText(m)}</span>
-          </label>
-        `;
-      }).join("");
-    }
-
-    function setAllModalProfileAccesses(checked) {
-      document.querySelectorAll("#apAccessCheckboxes input[type='checkbox']").forEach(cb => {
-        cb.checked = Boolean(checked);
-      });
-    }
-
-    function applyDefaultRoleAccessesInModal() {
-      const roleEl = document.getElementById("apStaffRole");
-      const role = roleEl ? roleEl.value : "";
-      const defaults = ROLE_DEFAULT_ACCESS_MAP[role] || ALL_ERP_MODULES;
-      renderModalAccessCheckboxes(defaults);
-      showToast(`Reset permissions to default for role "${role}"`);
-    }
-
-    function renderModalPersonalLedger(st) {
-      const expenses = (ERP_DB && Array.isArray(ERP_DB.expenses)) ? ERP_DB.expenses : [];
-      const payments = (ERP_DB && Array.isArray(ERP_DB.paymentsLog)) ? ERP_DB.paymentsLog : [];
-
-      const stExps = expenses.filter(e =>
-        e.responsibleStaffName === st.name ||
-        e.responsibleStaffId === st.id ||
-        e.staff === st.name ||
-        e.createdBy === st.name
-      );
-      const totalExp = stExps.reduce((s, e) => s + (Number(e.amount) || 0), 0);
-
-      const stAdv = payments.filter(p => (p.advanceByStaff === st.name || p.staff === st.name) && p.paymentType === "Advance Payment");
-      const totalAdv = stAdv.reduce((s, p) => s + (Number(p.amount) || 0), 0);
-
-      const stDue = payments.filter(p => (p.dueByStaff === st.name || p.staff === st.name) && p.paymentType === "Due Payment");
-      const totalDue = stDue.reduce((s, p) => s + (Number(p.amount) || 0), 0);
-
-      const badgesEl = document.getElementById("apPersonalLedgerBadges");
-      if (badgesEl) {
-        badgesEl.innerHTML = `
-          <span class="badge badge-orange" style="font-size:11px;">Expenses: ${formatBDT(totalExp)} (${stExps.length} vch)</span>
-          <span class="badge badge-green" style="font-size:11px;">Advance Paid: ${formatBDT(totalAdv)}</span>
-          <span class="badge badge-rose" style="font-size:11px;">Due Settled: ${formatBDT(totalDue)}</span>
-        `;
-      }
-
-      const ledgerBody = document.getElementById("apPersonalLedgerBody");
-      if (ledgerBody) {
-        const allRecords = [
-          ...stExps.map(e => ({ type: "Expense", date: e.date, title: e.title, details: e.details || e.category, amount: e.amount })),
-          ...stAdv.map(p => ({ type: "PO Advance", date: p.date, title: `Adv to ${p.supplierName}`, details: p.details || p.poId, amount: p.amount })),
-          ...stDue.map(p => ({ type: "Due Settlement", date: p.date, title: `Due to ${p.supplierName}`, details: p.details || p.poId, amount: p.amount }))
-        ].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
-
-        if (allRecords.length === 0) {
-          ledgerBody.innerHTML = `<div style="text-align:center;padding:12px;color:var(--text-muted);">No financial vouchers or settlements recorded under ${escapeHtmlText(st.name)} yet.</div>`;
-        } else {
-          ledgerBody.innerHTML = allRecords.map(r => `
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border-color);font-size:11px;">
-              <div>
-                <span class="badge ${r.type === 'Expense' ? 'badge-orange' : (r.type === 'PO Advance' ? 'badge-green' : 'badge-rose')}" style="font-size:9.5px;padding:1px 5px;margin-right:6px;">${r.type}</span>
-                <strong style="color:var(--text-primary);">${escapeHtmlText(r.title)}</strong>
-                <span style="color:var(--text-muted);margin-left:6px;">${r.date || ''} • ${escapeHtmlText(r.details || '')}</span>
-              </div>
-              <div class="mono" style="font-weight:700;color:var(--danger);">${formatBDT(r.amount)}</div>
-            </div>
-          `).join("");
-        }
-      }
-    }
-
-    function saveAdminProfileModalForm(e) {
-      if (e && e.preventDefault) e.preventDefault();
-      const staffList = (ERP_DB && Array.isArray(ERP_DB.staffMembers)) ? ERP_DB.staffMembers : [];
-      const staffId = document.getElementById("apStaffEditId")?.value || currentModalStaffId;
-      const st = staffList.find(s => s.id === staffId);
-      if (!st) {
-        showToast("Error: Staff member not found");
-        return;
-      }
-
-      const oldName = st.name;
-      const oldRole = st.role;
-
-      const newCustomId = (document.getElementById("apStaffCustomId")?.value || "").trim();
-      const newName = document.getElementById("apStaffName")?.value.trim() || st.name;
-      const newEmail = document.getElementById("apStaffEmail")?.value.trim() || st.email;
-      const newPhone = document.getElementById("apStaffPhone")?.value.trim() || st.phone;
-      const newRole = document.getElementById("apStaffRole")?.value || st.role;
-      const newDept = document.getElementById("apStaffDept")?.value.trim() || st.dept;
-      const newShift = document.getElementById("apStaffShift")?.value.trim() || st.shift;
-      const newAvatar = (document.getElementById("apStaffAvatar")?.value.trim() || st.avatar || "ST").toUpperCase();
-      const newPassword = document.getElementById("apStaffPassword")?.value.trim() || st.password || "Tehzib@2027";
-      const newStatus = document.getElementById("apStaffStatus")?.value || "Active";
-
-      const checkedAccesses = Array.from(document.querySelectorAll("#apAccessCheckboxes input[type='checkbox']:checked")).map(cb => cb.value);
-
-      // Update staff record
-      Object.assign(st, {
-        staffId: newCustomId,
-        name: newName,
-        email: newEmail,
-        phone: newPhone,
-        role: newRole,
-        dept: newDept,
-        shift: newShift,
-        avatar: newAvatar,
-        password: newPassword,
-        status: newStatus,
-        accesses: checkedAccesses.length ? checkedAccesses : (ROLE_DEFAULT_ACCESS_MAP[newRole] || ALL_ERP_MODULES)
-      });
-
-      // Cascade name and role changes across linked collections:
-      if (oldName !== newName || oldRole !== newRole) {
-        (ERP_DB.expenses || []).forEach(exp => {
-          if (exp.responsibleStaffName === oldName || exp.staff === oldName) {
-            exp.responsibleStaffName = newName;
-            exp.staff = newName;
-            exp.responsibleStaffRole = newRole;
-          }
-        });
-        (ERP_DB.paymentsLog || []).forEach(pay => {
-          if (pay.advanceByStaff === oldName) pay.advanceByStaff = newName;
-          if (pay.dueByStaff === oldName) pay.dueByStaff = newName;
-          if (pay.staff === oldName) pay.staff = newName;
-        });
-        (ERP_DB.suppliers || []).forEach(sup => {
-          if (sup.advanceByStaff === oldName) sup.advanceByStaff = newName;
-          if (sup.dueByStaff === oldName) sup.dueByStaff = newName;
-        });
-      }
-
-      // If currently active admin was edited, update session
-      if (window.__erpSessionObj && (window.__erpSessionObj.staffId === st.id || window.__erpSessionObj.id === st.email || window.__erpSessionObj.name === oldName)) {
-        window.__erpSessionObj.name = newName;
-        window.__erpSessionObj.id = newEmail;
-        window.__erpSessionObj.phone = newPhone;
-        window.__erpSessionObj.role = newRole;
-        window.__erpSessionObj.dept = newDept;
-        window.__erpSessionObj.shift = newShift;
-        window.__erpSessionObj.avatar = newAvatar;
-        window.__erpSessionObj.status = newStatus;
-        window.__erpSessionObj.accesses = st.accesses;
-        try {
-          localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(window.__erpSessionObj));
-        } catch (err) {}
-      }
-
-      saveErpDatabase();
-      updateAdminProfileTopbar();
-      renderAdminProfileDropdown();
-      updateSidebarRbacState();
-      renderWorkingTeamModule();
-      populateAllDynamicOptionSelects();
-
-      closeAdminProfileModal();
-      showToast(`Admin Profile for "${newName}" saved successfully!`);
-    }
+    const SELF_DELETE_BLOCKED_MSG = "Cannot delete the currently signed-in profile. Sign in with another Working Team Admin account first.";
 
     function initAuthGate() {
       const form = document.getElementById("adminLoginForm");
@@ -4291,40 +4312,34 @@ const IMG = {
           const rawId = (idInput?.value || "").trim().toLowerCase();
           const rawPass = (passInput?.value || "").trim();
           const remember = Boolean(document.getElementById("rememberSessionCheck")?.checked);
+          const errBanner = document.getElementById("authErrorBanner");
+          if (errBanner) errBanner.style.display = "none";
 
           const staffList = (ERP_DB && Array.isArray(ERP_DB.staffMembers) && ERP_DB.staffMembers.length)
             ? ERP_DB.staffMembers
             : SEED_STAFF_MEMBERS;
 
-          const matchedStaff = staffList.find(s =>
-            (s.email || "").toLowerCase() === rawId ||
-            (s.id || "").toLowerCase() === rawId ||
-            getCleanStaffId(s).toLowerCase() === rawId ||
-            (rawId === "tehzib-admin" && s.email === "admin@tehzib.com")
-          );
-
-          const matchedAdmin = AUTHORIZED_ADMINS[rawId];
-          const expectedPass = matchedStaff?.password || matchedAdmin?.pass || "Tehzib@2027";
-          const isLocalMatch = (rawPass === expectedPass || rawPass === "Tehzib@2027" || rawPass.toLowerCase() === "tehzib@2027");
+          const matchedStaff = findStaffRecord(staffList, rawId);
 
           fetch("/api/auth/admin", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
             body: JSON.stringify({ identifier: rawId, password: rawPass, remember })
           })
-            .then(r => r.json())
-            .then(res => {
-              if ((res && res.ok && res.data?.session) || (matchedStaff && isLocalMatch) || (matchedAdmin && isLocalMatch)) {
-                handleSuccessfulLogin(matchedStaff, matchedAdmin, res?.data?.session, remember, idInput.value.trim());
-              } else {
-                document.getElementById("authErrorBanner").style.display = "block";
+            .then(async r => {
+              const res = await r.json().catch(() => null);
+              if (r.ok && res && res.ok && res.data?.session) {
+                handleSuccessfulLogin(matchedStaff, null, res.data.session, remember, idInput.value.trim());
+              } else if (errBanner) {
+                errBanner.textContent = res?.error || "Invalid Admin ID or Password. Please verify your credentials and try again.";
+                errBanner.style.display = "block";
               }
             })
             .catch(() => {
-              if ((matchedStaff && isLocalMatch) || (matchedAdmin && isLocalMatch)) {
-                handleSuccessfulLogin(matchedStaff, matchedAdmin, null, remember, idInput.value.trim());
-              } else {
-                document.getElementById("authErrorBanner").style.display = "block";
+              if (errBanner) {
+                errBanner.textContent = "Unable to verify credentials with authentication server. Please try again.";
+                errBanner.style.display = "block";
               }
             });
         });
@@ -4332,33 +4347,53 @@ const IMG = {
 
       const logoutBtn = document.getElementById("sidebarLogoutBtn");
       if (logoutBtn) {
-        logoutBtn.addEventListener("click", lockErpWorkspace);
+        logoutBtn.addEventListener("click", () => lockErpWorkspace());
       }
     }
 
-    function handleSuccessfulLogin(matchedStaff, matchedAdmin, srvSess, remember, typedId) {
+    function handleSuccessfulLogin(matchedStaff, _matchedAdmin, srvSess, remember, typedId) {
       const errBanner = document.getElementById("authErrorBanner");
       if (errBanner) errBanner.style.display = "none";
+
+      if (!srvSess && (!matchedStaff || matchedStaff.status === "Inactive")) {
+        if (errBanner) {
+          errBanner.textContent = "Unauthorized or inactive Admin ID.";
+          errBanner.style.display = "block";
+        }
+        return;
+      }
 
       const staffList = (ERP_DB && Array.isArray(ERP_DB.staffMembers) && ERP_DB.staffMembers.length)
         ? ERP_DB.staffMembers
         : SEED_STAFF_MEMBERS;
-      const st = matchedStaff || (matchedAdmin ? staffList.find(s => s.role === matchedAdmin.role || s.email.toLowerCase() === typedId.toLowerCase()) : null) || staffList[0];
+      const st =
+        (srvSess?.staffId && findStaffRecord(staffList, srvSess.staffId)) ||
+        (srvSess?.email && findStaffRecord(staffList, srvSess.email)) ||
+        matchedStaff ||
+        null;
 
-      const resolvedRole = st ? st.role : (matchedAdmin?.role || srvSess?.role || "Founder & Store Owner");
+      const resolvedRole = srvSess?.role || st?.role || "Operations Staff";
+      const resolvedAccesses = srvSess?.permissions
+        ? convertServerPermissionsToLabels(srvSess.permissions, resolvedRole)
+        : getStaffAccessList(st);
+
+      if (st) {
+        st.role = resolvedRole;
+        st.accesses = [...resolvedAccesses];
+      }
 
       const sessionObj = {
-        staffId: st ? st.id : (srvSess?.staffId || "staff_tahmid"),
+        staffId: st ? st.id : srvSess.staffId,
         customStaffId: st ? getCleanStaffId(st) : "",
-        id: st ? st.email : (srvSess?.email || typedId),
-        name: st ? st.name : (srvSess?.name || (matchedAdmin?.name || "Tahmid Alvi")),
-        phone: st ? st.phone : "+880 1711-889900",
+        id: srvSess?.email || (st ? st.email : typedId),
+        name: srvSess?.name || st?.name || "Admin User",
+        phone: st ? st.phone : "",
         role: resolvedRole,
-        dept: st ? st.dept : "Executive & Strategy",
-        shift: st ? st.shift : "Full-Time Executive (Uttara HQ)",
-        status: st ? (st.status || "Active") : "Active",
-        avatar: st ? (st.avatar || "TA") : (matchedAdmin?.avatar || srvSess?.avatar || "TA"),
-        accesses: (st && Array.isArray(st.accesses) && st.accesses.length) ? st.accesses : (ROLE_DEFAULT_ACCESS_MAP[resolvedRole] || ALL_ERP_MODULES)
+        dept: st ? st.dept : "Operations",
+        shift: st ? normalizeStaffWorkingShift(st.shift) : "Full-Time (Day Shift)",
+        status: st ? normalizeStaffEmploymentStatus(st.status) : "Permanent",
+        avatar: srvSess?.avatar || (st ? (st.avatar || "ST") : "ST"),
+        accesses: resolvedAccesses
       };
 
       if (remember) {
@@ -4371,35 +4406,57 @@ const IMG = {
     }
 
     function unlockErpWorkspace(sessionObj, switchToAdmin = true) {
-      window.__erpAdminAuthenticated = true;
       const staffList = (ERP_DB && Array.isArray(ERP_DB.staffMembers) && ERP_DB.staffMembers.length)
         ? ERP_DB.staffMembers
         : SEED_STAFF_MEMBERS;
-      const liveStaff = staffList.find(s => s.id === sessionObj.staffId || s.email.toLowerCase() === (sessionObj.id || "").toLowerCase());
-      if (liveStaff) {
-        sessionObj.staffId = liveStaff.id;
-        sessionObj.name = liveStaff.name;
-        sessionObj.phone = liveStaff.phone;
-        sessionObj.role = liveStaff.role;
-        sessionObj.dept = liveStaff.dept;
-        sessionObj.shift = liveStaff.shift;
-        sessionObj.status = liveStaff.status || "Active";
-        sessionObj.avatar = liveStaff.avatar || "TA";
-        sessionObj.accesses = Array.isArray(liveStaff.accesses) ? liveStaff.accesses : (ROLE_DEFAULT_ACCESS_MAP[liveStaff.role] || ALL_ERP_MODULES);
+      const liveStaff =
+        findStaffRecord(staffList, sessionObj.staffId) ||
+        findStaffRecord(staffList, sessionObj.id) ||
+        findStaffRecord(staffList, sessionObj.customStaffId);
+
+      if (!liveStaff || liveStaff.status === "Inactive") {
+        lockErpWorkspace({ silent: true });
+        return;
       }
+
+      if (Array.isArray(sessionObj.accesses) && sessionObj.accesses.length) {
+        liveStaff.accesses = [...sessionObj.accesses];
+      }
+      sessionObj.staffId = liveStaff.id;
+      sessionObj.customStaffId = getCleanStaffId(liveStaff);
+      sessionObj.id = liveStaff.email;
+      sessionObj.name = liveStaff.name;
+      sessionObj.phone = liveStaff.phone;
+      sessionObj.role = liveStaff.role;
+      sessionObj.dept = liveStaff.dept;
+      sessionObj.shift = normalizeStaffWorkingShift(liveStaff.shift);
+      sessionObj.status = normalizeStaffEmploymentStatus(liveStaff.status);
+      sessionObj.avatar = (liveStaff.avatar && liveStaff.avatar !== "ST") ? liveStaff.avatar : getStaffInitials(liveStaff.name);
+      sessionObj.accesses = getStaffAccessList(liveStaff);
+
+      window.__erpAdminAuthenticated = true;
       window.__erpSessionObj = sessionObj;
 
+      // Resolve a strictly permitted view BEFORE showing #erpAppShell so unauthorized views never flash or stay .active
+      const requestedTarget = switchToAdmin ? window.__pendingErpTargetView : "";
+      window.__pendingErpTargetView = "";
+      const activeEl = document.querySelector(".erp-view.active");
+      const activeKey = activeEl ? activeEl.id.replace("view-", "") : "dashboard";
+      const preferredView = requestedTarget || activeKey || "dashboard";
+      const safeTargetView = resolvePermittedErpView(preferredView, liveStaff);
+
       if (switchToAdmin) {
-        switchWorkspaceMode("admin");
+        switchWorkspaceMode("admin", safeTargetView || "dashboard");
         const authGate = document.getElementById("authGateScreen");
         const erpShell = document.getElementById("erpAppShell");
         if (authGate) authGate.style.display = "none";
         if (erpShell) erpShell.style.display = "block";
+      } else {
+        updateAdminProfileTopbar();
+        renderAdminProfileDropdown();
+        updateSidebarRbacState();
+        if (safeTargetView) switchErpView(safeTargetView);
       }
-
-      updateAdminProfileTopbar();
-      renderAdminProfileDropdown();
-      updateSidebarRbacState();
 
       // Set default responsible staff across forms
       const expStaffEl = document.getElementById("expResponsibleStaff");
@@ -4408,32 +4465,38 @@ const IMG = {
       if (spAdvStaffEl) spAdvStaffEl.value = sessionObj.name;
       const wtPayStaffEl = document.getElementById("wtPayAdvStaff");
       if (wtPayStaffEl) wtPayStaffEl.value = sessionObj.name;
-
-      if (switchToAdmin && window.__pendingErpTargetView) {
-        switchErpView(window.__pendingErpTargetView);
-        window.__pendingErpTargetView = "";
-      } else {
-        renderAllErpModules();
-      }
     }
 
-    function lockErpWorkspace() {
+    function lockErpWorkspace(options = {}) {
+      const silent = Boolean(options && options.silent);
       window.__erpAdminAuthenticated = false;
       window.__erpSessionObj = null;
+      window.__pendingErpTargetView = "";
       closeAdminProfileDropdown();
-      closeAdminProfileModal();
+      if (typeof closeWorkingTeamStaffModal === "function") {
+        closeWorkingTeamStaffModal();
+      }
+      if (typeof resetWorkingTeamStaffForm === "function") {
+        resetWorkingTeamStaffForm();
+      }
+      document.querySelectorAll(".erp-view").forEach(v => v.classList.remove("active"));
+      document.querySelectorAll("#erpSidebar .erp-nav-btn").forEach(b => b.classList.remove("active"));
       try {
         localStorage.removeItem(AUTH_SESSION_KEY);
       } catch (e) {}
-      fetch("/api/auth/admin", { method: "DELETE" }).catch(() => {});
-      switchWorkspaceMode("admin");
+      fetch("/api/auth/admin", { method: "DELETE", credentials: "same-origin" }).catch(() => {});
+      if (!options.stayInStorefront) {
+        switchWorkspaceMode("admin");
+      }
       const authGate = document.getElementById("authGateScreen");
       const erpShell = document.getElementById("erpAppShell");
       if (erpShell) erpShell.style.display = "none";
       if (authGate) authGate.style.display = "flex";
       const passInput = document.getElementById("loginAdminPass");
       if (passInput) passInput.value = "";
-      showToast("Signed out of Operations Management System (Admin Workspace Locked)");
+      if (!silent) {
+        showToast("Signed out of Operations Management System (Admin Workspace Locked)");
+      }
     }
 
     // ========================================================================
@@ -4455,18 +4518,17 @@ const IMG = {
       const aliasMap = { reports: "dashboard", cms: "marketing_cms", hrm: "working_team", expenses_assets: "finance", accounts: "finance" };
       const resolvedKey = aliasMap[viewKey] || viewKey;
 
-      // Strict RBAC Enforcement
-      const activeStaff = getActiveAdminStaffRecord();
-      const lockToggle = document.getElementById("rbacStrictLockToggle");
-      const strictLock = lockToggle ? lockToggle.checked : true;
-      const accesses = (activeStaff && Array.isArray(activeStaff.accesses))
-        ? activeStaff.accesses
-        : (ROLE_DEFAULT_ACCESS_MAP[activeStaff?.role] || ALL_ERP_MODULES);
+      if (!window.__erpAdminAuthenticated) {
+        showToast("Please sign in to access ERP modules.");
+        return false;
+      }
 
+      // Strict Unconditional RBAC Enforcement
+      const activeStaff = getActiveAdminStaffRecord();
       const moduleName = VIEW_KEY_TO_MODULE[resolvedKey];
-      if (strictLock && moduleName && !accesses.includes(moduleName)) {
-        showToast(`🔒 Access Restricted: "${activeStaff?.name || 'Staff'}" (${activeStaff?.role || 'Current Role'}) does not have permission for "${moduleName}".`);
-        return;
+      if (!activeStaff || (moduleName && !hasActiveModuleAccess(moduleName, activeStaff))) {
+        showToast(`🔒 Access Restricted: "${activeStaff?.name || 'Staff'}" (${activeStaff?.role || 'Current Role'}) does not have permission for "${moduleName || resolvedKey}".`);
+        return false;
       }
 
       document.querySelectorAll(".erp-view").forEach(v => v.classList.remove("active"));
@@ -4485,6 +4547,7 @@ const IMG = {
       const sb = document.getElementById("erpSidebar");
       if (sb) sb.classList.remove("mobile-open");
       renderAllErpModules();
+      return true;
     }
 
     function switchDashTab(tabKey) {
@@ -8534,29 +8597,102 @@ const IMG = {
       // Bind Working Team Staff Create / Edit Form
       document.getElementById("workingTeamStaffForm")?.addEventListener("submit", e => {
         e.preventDefault();
-        const editId = document.getElementById("wtStaffEditId")?.value || document.getElementById("wtStaffTargetSelect")?.value || "";
+        if (!hasWorkingTeamAccess()) {
+          showToast("🔒 Access Restricted: Working Team Admin permission required.");
+          return;
+        }
+        const editId = document.getElementById("wtStaffEditId")?.value || "";
         const customStaffId = document.getElementById("wtStaffIdInput")?.value?.trim() || "";
-        const name = document.getElementById("wtStaffName")?.value?.trim();
-        const phone = document.getElementById("wtStaffPhone")?.value?.trim();
-        const email = document.getElementById("wtStaffEmail")?.value?.trim();
-        const role = document.getElementById("wtStaffRole")?.value || "Operations Staff";
+        const name = document.getElementById("wtStaffName")?.value?.trim() || "";
+        const phone = document.getElementById("wtStaffPhone")?.value?.trim() || "";
+        const email = (document.getElementById("wtStaffEmail")?.value?.trim() || "").toLowerCase();
+        const roleSelectEl = document.getElementById("wtStaffRole");
+        const role = (roleSelectEl?.value && roleSelectEl.value !== "__ADD_NEW__") ? roleSelectEl.value.trim() : "Operations Staff";
         const dept = document.getElementById("wtStaffDept")?.value?.trim() || "Operations";
-        const status = document.getElementById("wtStaffStatus")?.value || "Active";
+        const shift = normalizeStaffWorkingShift(document.getElementById("wtStaffShift")?.value);
+        const status = normalizeStaffEmploymentStatus(document.getElementById("wtStaffStatus")?.value || "Permanent");
+        const enteredPassword = (document.getElementById("wtStaffPassword")?.value || "").trim();
         const accesses = Array.from(document.querySelectorAll("#wtAccessCheckboxes input[type='checkbox']:checked")).map(cb => cb.value);
 
-        if (!name) return;
+        if (!name) {
+          showToast("Please enter Staff Full Name.");
+          document.getElementById("wtStaffName")?.focus();
+          return;
+        }
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          showToast("Please enter a valid Official Email / Login ID.");
+          document.getElementById("wtStaffEmail")?.focus();
+          return;
+        }
+        if (enteredPassword && enteredPassword.length < 4) {
+          showToast("Password must be at least 4 characters (or leave blank to keep current).");
+          document.getElementById("wtStaffPassword")?.focus();
+          return;
+        }
         if (!Array.isArray(ERP_DB.staffMembers)) ERP_DB.staffMembers = [];
 
-        if (editId) {
-          const st = ERP_DB.staffMembers.find(x => x.id === editId);
-          if (st) {
-            Object.assign(st, { staffId: customStaffId, name, phone, email, role, dept, status, accesses });
-            showToast(`Updated Staff "${name}"${customStaffId ? ` (Staff ID: ${customStaffId})` : ""} (${role})`);
+        const editTarget = editId ? findStaffRecord(ERP_DB.staffMembers, editId) : null;
+        if (editId && !editTarget) {
+          showToast("Staff record to update was not found. Resetting form.");
+          resetWorkingTeamStaffForm();
+          return;
+        }
+
+        if (customStaffId) {
+          const dupId = isStaffIdDuplicate(customStaffId, editTarget);
+          if (dupId) {
+            showToast(`Staff ID "${customStaffId}" is already assigned to ${dupId.name}. Please choose a unique Staff ID.`);
+            document.getElementById("wtStaffIdInput")?.focus();
+            return;
           }
+        }
+        const dupEmail = isStaffEmailDuplicate(email, editTarget);
+        if (dupEmail) {
+          showToast(`Email "${email}" is already used by ${dupEmail.name}.`);
+          document.getElementById("wtStaffEmail")?.focus();
+          return;
+        }
+
+        ERP_DB.staffRoles = getMergedStaffRoles({ staffRoles: [...(ERP_DB.staffRoles || []), role], staffMembers: ERP_DB.staffMembers });
+
+        if (editTarget) {
+          const prevName = editTarget.name;
+          const prevEmail = editTarget.email;
+          const prevRole = editTarget.role;
+          const prevCustomId = getCleanStaffId(editTarget);
+          const oldInit = getStaffInitials(prevName);
+          const nextAvatar = (!editTarget.avatar || editTarget.avatar === "ST" || editTarget.avatar === oldInit)
+            ? getStaffInitials(name)
+            : editTarget.avatar;
+          if (prevEmail && prevEmail.toLowerCase() !== email) {
+            editTarget.prevEmail = prevEmail;
+          }
+          Object.assign(editTarget, {
+            staffId: customStaffId,
+            name,
+            phone,
+            email,
+            role,
+            dept,
+            shift,
+            avatar: nextAvatar,
+            status,
+            accesses: accesses.length ? accesses : (ROLE_DEFAULT_ACCESS_MAP[role] || ["Dashboard & BI", "Orders & POS"])
+          });
+          if (enteredPassword) {
+            editTarget.newPassword = enteredPassword;
+          }
+          if (prevName !== name) {
+            (ERP_DB.suppliers || []).forEach(sup => {
+              if (sup.advanceByStaff === prevName) sup.advanceByStaff = name;
+              if (sup.dueByStaff === prevName) sup.dueByStaff = name;
+            });
+          }
+          cascadeStaffProfileUpdate(editTarget, prevName, prevEmail, prevRole, prevCustomId);
+          showToast(`Updated Staff "${name}"${customStaffId ? ` (Staff ID: ${customStaffId})` : ""}${enteredPassword ? " & Password" : ""} (${role})`);
         } else {
-          const internalId = "staff_" + Date.now();
-          const avatarInit = name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase() || "ST";
-          ERP_DB.staffMembers.push({
+          const internalId = "staff_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
+          const newStaff = normalizeStaffRecord({
             id: internalId,
             staffId: customStaffId,
             name,
@@ -8564,21 +8700,30 @@ const IMG = {
             email,
             role,
             dept,
-            shift: "09:00 AM – 06:00 PM",
-            avatar: avatarInit,
+            shift,
+            avatar: getStaffInitials(name),
             status,
-            accesses: accesses.length ? accesses : ["Dashboard & BI", "Orders & POS"]
-          });
+            accesses: accesses.length ? accesses : (ROLE_DEFAULT_ACCESS_MAP[role] || ["Dashboard & BI", "Orders & POS"]),
+            ...(enteredPassword ? { newPassword: enteredPassword } : {})
+          }, ERP_DB.staffMembers.length);
+          ERP_DB.staffMembers.push(newStaff);
           showToast(`Created Staff "${name}"${customStaffId ? ` (Staff ID: ${customStaffId})` : ""} & assigned role/accesses!`);
         }
+
+        saveErpDatabase(enteredPassword ? { immediate: true } : undefined);
+        populateAllDynamicOptionSelects();
         resetWorkingTeamStaffForm();
-        saveErpDatabase();
+        closeWorkingTeamStaffModal();
         renderAllErpModules();
       });
 
       // Bind Working Team Record Payment Form
       document.getElementById("wtRecordPaymentForm")?.addEventListener("submit", e => {
         e.preventDefault();
+        if (!hasWorkingTeamAccess()) {
+          showToast("🔒 Access Restricted: Working Team Admin permission required.");
+          return;
+        }
         const supId = document.getElementById("wtPaySupplier")?.value;
         const payType = document.getElementById("wtPayType")?.value || "Advance Payment";
         const amount = Math.max(1, Number(document.getElementById("wtPayAmount")?.value) || 0);
@@ -8604,8 +8749,12 @@ const IMG = {
           ERP_DB.accounts[accKey].balance = Math.max(0, Number(ERP_DB.accounts[accKey].balance || 0) - amount);
         }
         if (!Array.isArray(ERP_DB.paymentsLog)) ERP_DB.paymentsLog = [];
+        let payNum = ERP_DB.paymentsLog.length + 510;
+        while (ERP_DB.paymentsLog.some(p => p.id === `PAY-${payNum}`)) {
+          payNum += 1;
+        }
         ERP_DB.paymentsLog.unshift({
-          id: "PAY-" + (ERP_DB.paymentsLog.length + 510),
+          id: "PAY-" + payNum,
           date: nowTimestamp().slice(0, 10),
           supplierId: sup ? sup.id : "SUP-GEN",
           supplierName: sup ? sup.name : "General Supplier",
@@ -8649,47 +8798,30 @@ const IMG = {
         });
       }
 
-      // Admin Profile Settings Modal Form Submit
-      const apForm = document.getElementById("adminProfileEditForm");
-      if (apForm) {
-        apForm.addEventListener("submit", saveAdminProfileModalForm);
-      }
-
-      // Quick Action Footer Buttons inside Admin Profile Dropdown
-      const ddEditProfile = document.getElementById("ddEditProfileBtn");
-      if (ddEditProfile) {
-        ddEditProfile.addEventListener("click", () => {
-          const activeStaff = getActiveAdminStaffRecord();
-          openAdminProfileModal(activeStaff ? activeStaff.id : "staff_tahmid");
-        });
-      }
+      // Quick Action Footer Button inside Admin Profile Dropdown
       const ddMyLedger = document.getElementById("ddMyLedgerBtn");
       if (ddMyLedger) {
         ddMyLedger.addEventListener("click", () => {
           closeAdminProfileDropdown();
           const activeStaff = getActiveAdminStaffRecord();
+          if (!activeStaff) return;
+          if (!hasWorkingTeamAccess(activeStaff)) {
+            showToast("🔒 Access Restricted: Working Team Admin permission required.");
+            return;
+          }
           switchErpView("working_team");
           switchWtTab("expenses");
-          if (activeStaff) filterTeamReportByStaff(activeStaff.name);
+          filterTeamReportByStaff(activeStaff.id);
         });
       }
-      const ddManageStaff = document.getElementById("ddManageStaffBtn");
-      if (ddManageStaff) {
-        ddManageStaff.addEventListener("click", () => {
-          closeAdminProfileDropdown();
-          switchErpView("working_team");
-          switchWtTab("staff");
-        });
-      }
-
       // When wtStaffRole changes in workingTeamStaffForm, auto-preset default checkboxes if creating new staff
       const wtRoleEl = document.getElementById("wtStaffRole");
       if (wtRoleEl) {
         wtRoleEl.addEventListener("change", e => {
           const editId = document.getElementById("wtStaffEditId")?.value || "";
-          if (!editId) {
-            const role = e.target.value;
-            const defaults = ROLE_DEFAULT_ACCESS_MAP[role] || [];
+          const role = e.target.value;
+          if (!editId && role && role !== "__ADD_NEW__") {
+            const defaults = ROLE_DEFAULT_ACCESS_MAP[role] || ["Dashboard & BI", "Orders & POS"];
             const accSet = new Set(defaults);
             document.querySelectorAll("#wtAccessCheckboxes input[type='checkbox']").forEach(cb => {
               cb.checked = accSet.has(cb.value);
@@ -8742,20 +8874,22 @@ const IMG = {
         const el = document.getElementById(selId);
         if (!el) return;
         const cur = el.value;
-        el.innerHTML = staffList.map(s => `<option value="${s.name}">${s.name} — ${s.role.split("(")[0].trim()}</option>`).join("") +
+        el.innerHTML = staffList.map(s => `<option value="${escapeHtmlText(s.name)}">${escapeHtmlText(s.name)} — ${escapeHtmlText((s.role || "Staff").split("(")[0].trim())}</option>`).join("") +
           `<option value="__ADD_NEW__">➕ + Create New Staff Member...</option>`;
         if (cur && cur !== "__ADD_NEW__" && staffList.some(s => s.name === cur)) el.value = cur;
       });
 
-      // 4. Staff Roles (in Working Team)
+      // 4. Staff Roles (in Working Team Modal)
+      const mergedRoles = getMergedStaffRoles(ERP_DB);
+      ERP_DB.staffRoles = mergedRoles;
       const roleSelectIds = ["wtStaffRole"];
       roleSelectIds.forEach(selId => {
         const el = document.getElementById(selId);
         if (!el) return;
         const cur = el.value;
-        el.innerHTML = (ERP_DB.staffRoles || []).map(r => `<option value="${r}">${r}</option>`).join("") +
+        el.innerHTML = mergedRoles.map(r => `<option value="${escapeHtmlText(r)}">${escapeHtmlText(r)}</option>`).join("") +
           (selId === "wtStaffRole" ? `<option value="__ADD_NEW__">➕ + Create New Role Option...</option>` : "");
-        if (cur && cur !== "__ADD_NEW__" && (ERP_DB.staffRoles || []).includes(cur)) el.value = cur;
+        if (cur && cur !== "__ADD_NEW__" && mergedRoles.includes(cur)) el.value = cur;
       });
 
       // 5. Supplier Categories & Payment Terms
@@ -8835,7 +8969,7 @@ const IMG = {
           <div style="display:flex;flex-direction:column;gap:10px;">
             ${optionType === 'staff' ? `
               <div>
-                <label style="font-size:11px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:4px;">Staff ID</label>
+                <label style="font-size:11px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:4px;">Staff ID (Optional)</label>
                 <input type="text" id="customOptStaffIdInput" class="info-edit-input mono" placeholder="Enter Staff ID" />
               </div>
             ` : ""}
@@ -8857,7 +8991,8 @@ const IMG = {
           const customStaffId = document.getElementById("customOptStaffIdInput")?.value?.trim() || "";
           if (!val) {
             showToast("Please enter a valid name");
-            return;
+            document.getElementById("customOptPrimaryInput")?.focus();
+            return false;
           }
           let newSelectValue = val;
           if (optionType === "expenseCategory") {
@@ -8869,25 +9004,47 @@ const IMG = {
             newSelectValue = targetSelectId === "posAccountSelect" ? val : key;
           } else if (optionType === "staff") {
             if (!Array.isArray(ERP_DB.staffMembers)) ERP_DB.staffMembers = [];
-            const roleName = extra || "Operations & Accounts Executive";
+            if (customStaffId) {
+              const dupIdStaff = isStaffIdDuplicate(customStaffId, null);
+              if (dupIdStaff) {
+                showToast(`Staff ID "${customStaffId}" is already assigned to ${dupIdStaff.name}.`);
+                document.getElementById("customOptStaffIdInput")?.focus();
+                return false;
+              }
+            }
+            const roleName = extra || "Operations Staff";
+            if (!Array.isArray(ERP_DB.staffRoles)) ERP_DB.staffRoles = [];
+            if (!ERP_DB.staffRoles.some(r => r.toLowerCase() === roleName.toLowerCase())) {
+              ERP_DB.staffRoles.push(roleName);
+            }
+            const baseSlug = val.toLowerCase().replace(/[^a-z0-9]/g, "") || "staff";
+            let genEmail = `${baseSlug}@tehzib.com`;
+            if (isStaffEmailDuplicate(genEmail, null)) {
+              genEmail = `${baseSlug}_${Date.now() % 10000}@tehzib.com`;
+            }
             if (!ERP_DB.staffMembers.some(s => s.name.toLowerCase() === val.toLowerCase())) {
-              ERP_DB.staffMembers.push({
+              const newStaff = normalizeStaffRecord({
                 id: "staff_" + Date.now(),
                 staffId: customStaffId,
                 name: val,
                 phone: "+880 1711-000000",
-                email: val.toLowerCase().replace(/[^a-z0-9]/g, "") + "@tehzib.com",
+                email: genEmail,
                 role: roleName,
                 dept: "Operations",
-                shift: "09:00 AM – 06:00 PM",
-                avatar: val.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase() || "ST",
-                status: "Active",
-                accesses: ["Dashboard & BI", "Suppliers & PO", "Expenses & Payments"]
+                shift: "Full-Time (Day Shift)",
+                avatar: getStaffInitials(val),
+                status: "Permanent",
+                accesses: ROLE_DEFAULT_ACCESS_MAP[roleName] ? [...ROLE_DEFAULT_ACCESS_MAP[roleName]] : ["Dashboard & BI", "Suppliers & PO", "Expenses & Payments"]
               });
+              ERP_DB.staffMembers.push(newStaff);
             }
           } else if (optionType === "staffRole") {
-            if (!Array.isArray(ERP_DB.staffRoles)) ERP_DB.staffRoles = [];
-            if (!ERP_DB.staffRoles.includes(val)) ERP_DB.staffRoles.push(val);
+            ERP_DB.staffRoles = getMergedStaffRoles(ERP_DB);
+            if (!ERP_DB.staffRoles.some(r => r.toLowerCase() === val.toLowerCase())) {
+              ERP_DB.staffRoles.push(val);
+            } else {
+              newSelectValue = ERP_DB.staffRoles.find(r => r.toLowerCase() === val.toLowerCase()) || val;
+            }
           } else if (optionType === "supplierCategory") {
             if (!Array.isArray(ERP_DB.supplierCategories)) ERP_DB.supplierCategories = [];
             if (!ERP_DB.supplierCategories.includes(val)) ERP_DB.supplierCategories.push(val);
@@ -8900,7 +9057,12 @@ const IMG = {
           populateAllDynamicOptionSelects();
           renderAllErpModules();
           const targetEl = document.getElementById(targetSelectId);
-          if (targetEl) targetEl.value = newSelectValue;
+          if (targetEl) {
+            targetEl.value = newSelectValue;
+            if (targetSelectId === "wtStaffRole") {
+              targetEl.dispatchEvent(new Event("change"));
+            }
+          }
           showToast(`Created & selected "${val}"!`);
         }
       });
@@ -9066,6 +9228,10 @@ const IMG = {
     // VIEW 8: WORKING TEAM MODULE (STAFF & ROLES, EXPENSE REPORT, PAYMENT REPORT)
     // ========================================================================
     function switchWtTab(tabKey) {
+      if (!hasWorkingTeamAccess()) {
+        showToast("🔒 Access Restricted: Working Team Admin permission required.");
+        return;
+      }
       document.querySelectorAll("[data-wt-tab]").forEach(b => {
         b.classList.toggle("active", b.getAttribute("data-wt-tab") === tabKey);
       });
@@ -9077,9 +9243,30 @@ const IMG = {
     }
 
     function renderWorkingTeamModule() {
+      if (!hasWorkingTeamAccess()) {
+        ["wtStaffTableBody", "workingTeamStaffTableBody", "wtStaffExpenseSummaryCards", "wtExpReportBody", "wtPayReportBody"].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) el.innerHTML = "";
+        });
+        const wtView = document.getElementById("view-working_team");
+        if (window.__erpAdminAuthenticated && wtView && wtView.classList.contains("active")) {
+          const fallbackView = resolvePermittedErpView("dashboard");
+          if (fallbackView && fallbackView !== "working_team") {
+            switchErpView(fallbackView);
+          } else {
+            wtView.classList.remove("active");
+          }
+        }
+        return;
+      }
       const staffList = ERP_DB.staffMembers || [];
+      const mergedRoles = getMergedStaffRoles(ERP_DB);
+      ERP_DB.staffRoles = mergedRoles;
       const expenses = ERP_DB.expenses || [];
       const payments = ERP_DB.paymentsLog || [];
+
+      const navBadgeTeam = document.getElementById("navBadgeTeam");
+      if (navBadgeTeam) navBadgeTeam.textContent = `${staffList.length} Staff`;
 
       const totalExpAmt = expenses.reduce((s, x) => s + (Number(x.amount) || 0), 0);
       const totalAdvAmt = payments.filter(p => p.paymentType === "Advance Payment").reduce((s, x) => s + (Number(x.amount) || 0), 0);
@@ -9091,7 +9278,7 @@ const IMG = {
           <div class="kpi-card">
             <div class="kpi-label"><span>Active Working Team</span><span>👥</span></div>
             <div class="kpi-value mono">${staffList.length} Staff</div>
-            <div class="kpi-sub"><span>${(ERP_DB.staffRoles || []).length} Operational Roles</span><span class="badge badge-green">RBAC Active</span></div>
+            <div class="kpi-sub"><span>${mergedRoles.length} Operational Roles</span><span class="badge badge-green">RBAC Active</span></div>
           </div>
           <div class="kpi-card">
             <div class="kpi-label"><span>Team Expenses Logged</span><span>🧾</span></div>
@@ -9115,56 +9302,75 @@ const IMG = {
       const wtSupSel = document.getElementById("wtPaySupplier");
       if (wtSupSel && Array.isArray(ERP_DB.suppliers)) {
         const cur = wtSupSel.value;
-        wtSupSel.innerHTML = ERP_DB.suppliers.map(s => `<option value="${s.id}">${s.name} (Paid: ${formatBdt(s.paidAmount || 0)} • Due: ${formatBdt(s.payable || 0)})</option>`).join("");
+        wtSupSel.innerHTML = ERP_DB.suppliers.map(s => `<option value="${escapeHtmlText(s.id)}">${escapeHtmlText(s.name)} (Paid: ${formatBdt(s.paidAmount || 0)} • Due: ${formatBdt(s.payable || 0)})</option>`).join("");
         if (cur && ERP_DB.suppliers.some(s => s.id === cur)) wtSupSel.value = cur;
       }
 
-      // Populate Filter Dropdowns in Working Team Expense & Payment Reports
-      const expStaffFilter = document.getElementById("wtExpFilterStaff");
-      if (expStaffFilter) {
-        const cur = expStaffFilter.value || "ALL";
-        expStaffFilter.innerHTML = `<option value="ALL">All Responsible Staff</option>` +
-          staffList.map(s => `<option value="${s.name}">${s.name}</option>`).join("");
-        expStaffFilter.value = cur;
-      }
+      // Populate Category Filter Dropdown & sync search clear buttons in Working Team Reports
       const expCatFilter = document.getElementById("wtExpFilterCategory");
       if (expCatFilter) {
         const cur = expCatFilter.value || "ALL";
         expCatFilter.innerHTML = `<option value="ALL">All Expense Fields</option>` +
-          (ERP_DB.expenseCategories || []).map(c => `<option value="${c}">${c}</option>`).join("");
-        expCatFilter.value = cur;
+          (ERP_DB.expenseCategories || []).map(c => `<option value="${escapeHtmlText(c)}">${escapeHtmlText(c)}</option>`).join("");
+        expCatFilter.value = (cur === "ALL" || (ERP_DB.expenseCategories || []).includes(cur)) ? cur : "ALL";
       }
-      const payStaffFilter = document.getElementById("wtPayFilterStaff");
-      if (payStaffFilter) {
-        const cur = payStaffFilter.value || "ALL";
-        payStaffFilter.innerHTML = `<option value="ALL">All Responsible Staff</option>` +
-          staffList.map(s => `<option value="${s.name}">${s.name}</option>`).join("");
-        payStaffFilter.value = cur;
+      const rawStaffSearch = syncWorkingTeamSearchClear("wtStaffSearchInput", "wtStaffSearchClearBtn");
+      const rawExpStaffSearch = syncWorkingTeamSearchClear("wtExpFilterStaff", "wtExpFilterStaffClearBtn");
+      const rawPayStaffSearch = syncWorkingTeamSearchClear("wtPayFilterStaff", "wtPayFilterStaffClearBtn");
+
+      // 1. Render Staff Directory Table (with live search)
+      const filteredStaffList = rawStaffSearch
+        ? staffList.filter(st => matchesStaffSearchQuery(st, rawStaffSearch))
+        : staffList;
+      const staffSearchCountEl = document.getElementById("wtStaffSearchCount");
+      if (staffSearchCountEl) {
+        if (rawStaffSearch) {
+          staffSearchCountEl.textContent = `${filteredStaffList.length} / ${staffList.length}`;
+          staffSearchCountEl.style.display = "inline-flex";
+        } else {
+          staffSearchCountEl.style.display = "none";
+        }
       }
 
-      // 1. Render Staff Directory Table
       const staffBody = document.getElementById("wtStaffTableBody") || document.getElementById("workingTeamStaffTableBody");
       const activeStaff = getActiveAdminStaffRecord();
       if (staffBody) {
-        staffBody.innerHTML = staffList.map(st => {
+        if (filteredStaffList.length === 0) {
+          staffBody.innerHTML = `
+            <tr>
+              <td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted);">
+                ${rawStaffSearch
+                  ? `No staff members match "${escapeHtmlText(rawStaffSearch)}". <button type="button" class="btn btn-xs btn-secondary" style="margin-left:8px;" onclick="clearWorkingTeamStaffSearch()">Clear Search</button>`
+                  : "No staff members found in Working Team directory."}
+              </td>
+            </tr>
+          `;
+        } else {
+          staffBody.innerHTML = filteredStaffList.map(st => {
           const isActiveAdmin = (st.id === activeStaff?.id);
           const customId = getCleanStaffId(st);
-          const stExps = expenses.filter(e => e.responsibleStaffName === st.name || e.responsibleStaffId === st.id || e.staff === st.name || e.createdBy === st.name);
+          const avatarText = (st.avatar && st.avatar !== "ST") ? st.avatar : getStaffInitials(st.name);
+          const stExps = expenses.filter(e => doesExpenseMatchStaff(e, st));
           const stExpTotal = stExps.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-          const stAdvTotal = payments.filter(p => (p.advanceByStaff === st.name || p.staff === st.name) && p.paymentType === "Advance Payment").reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-          const stDueTotal = payments.filter(p => (p.dueByStaff === st.name || p.staff === st.name) && p.paymentType === "Due Payment").reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-          const accessPills = (st.accesses || ROLE_DEFAULT_ACCESS_MAP[st.role] || ALL_ERP_MODULES).map(a => `<span class="badge badge-blue" style="font-size:9.5px;margin:1px;">${escapeHtmlText(a)}</span>`).join(" ");
+          const stAdvTotal = payments.filter(p => (String(p.advanceByStaff || "").trim().toLowerCase() === String(st.name || "").trim().toLowerCase() || p.staff === st.name) && p.paymentType === "Advance Payment").reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+          const stDueTotal = payments.filter(p => (String(p.dueByStaff || "").trim().toLowerCase() === String(st.name || "").trim().toLowerCase() || p.staff === st.name) && p.paymentType === "Due Payment").reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+          const accessList = getStaffAccessList(st);
+          const accessPills = accessList.map(a => `<span class="badge badge-blue" style="font-size:9.5px;margin:1px;">${escapeHtmlText(a)}</span>`).join(" ");
+          const safeIdArg = escapeHtmlText(st.id).replace(/'/g, "");
+          const statusLabel = normalizeStaffEmploymentStatus(st.status);
+          const statusClass = getStaffStatusBadgeClass(statusLabel);
+          const shiftLabel = normalizeStaffWorkingShift(st.shift);
           return `
-            <tr class="${isActiveAdmin ? 'active-admin-row' : ''}">
+            <tr class="${isActiveAdmin ? 'active-admin-row' : ''}" data-staff-id="${escapeHtmlText(st.id)}">
               <td>
                 <div style="display:flex;align-items:center;gap:10px;">
-                  <div class="erp-dd-avatar-circle" style="width:34px;height:34px;font-size:12px;flex-shrink:0;">${st.avatar || "ST"}</div>
+                  <div class="erp-dd-avatar-circle" style="width:34px;height:34px;font-size:12px;flex-shrink:0;">${escapeHtmlText(avatarText)}</div>
                   <div>
                     <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
                       <strong style="font-size:13px;">${escapeHtmlText(st.name)}</strong>
                       ${isActiveAdmin ? `<span class="badge badge-green" style="font-size:9.5px;padding:1px 6px;">● Logged-In Admin</span>` : ''}
                     </div>
-                    <div class="mono" style="font-size:11px;color:var(--accent-rose-deep);">${customId ? `${escapeHtmlText(customId)} • ` : ''}${escapeHtmlText(st.phone)}</div>
+                    <div class="mono" style="font-size:11px;color:var(--accent-rose-deep);">${customId ? `Staff ID: ${escapeHtmlText(customId)} • ` : ''}${escapeHtmlText(st.phone)}</div>
                     <div class="mono" style="font-size:10px;color:var(--text-muted);">${escapeHtmlText(st.email)}</div>
                   </div>
                 </div>
@@ -9172,7 +9378,7 @@ const IMG = {
               <td>
                 <span class="badge badge-rose">${escapeHtmlText(st.role)}</span>
                 <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">Dept: ${escapeHtmlText(st.dept || "Operations")}</div>
-                <div style="font-size:10.5px;color:var(--text-secondary);margin-top:2px;">Shift: ${escapeHtmlText(st.shift || "09:00 AM – 06:00 PM")}</div>
+                <div style="font-size:10.5px;color:var(--text-secondary);margin-top:2px;">Shift: ${escapeHtmlText(shiftLabel)}</div>
               </td>
               <td style="max-width:260px;">${accessPills}</td>
               <td class="mono">
@@ -9182,45 +9388,49 @@ const IMG = {
               <td class="mono" style="font-weight:700;color:var(--status-green);">${formatBdt(stAdvTotal)}</td>
               <td class="mono" style="font-weight:700;color:var(--accent-rose-deep);">${formatBdt(stDueTotal)}</td>
               <td>
-                <span class="badge ${st.status === 'Active' ? 'badge-green' : 'badge-orange'}">${st.status || 'Active'}</span>
+                <span class="badge ${statusClass}">${escapeHtmlText(statusLabel)}</span>
                 <div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap;">
-                  ${isActiveAdmin ?
-                    `<button type="button" class="btn btn-xs btn-secondary" disabled style="opacity:0.65;">✓ Active Profile</button>` :
-                    `<button type="button" class="btn btn-xs btn-primary" onclick="switchActiveErpStaffProfile('${st.id}')">🔑 Switch Profile</button>`
+                  <button type="button" class="btn btn-xs btn-secondary" onclick="editWorkingTeamStaff('${safeIdArg}')">✎ Edit</button>
+                  <button type="button" class="btn btn-xs btn-secondary" onclick="filterTeamReportByStaff('${safeIdArg}')">📊 Reports</button>
+                  ${isActiveAdmin || staffList.length <= 1 ?
+                    `<button type="button" class="btn btn-xs btn-danger" disabled style="opacity:0.45;cursor:not-allowed;" title="${isActiveAdmin ? 'Currently active logged-in profile cannot be deleted' : 'At least 1 staff member must remain'}">🗑 Delete</button>` :
+                    `<button type="button" class="btn btn-xs btn-danger" onclick="deleteWorkingTeamStaff('${safeIdArg}')">🗑 Delete</button>`
                   }
-                  <button type="button" class="btn btn-xs btn-secondary" onclick="openAdminProfileModal('${st.id}')">⚙ Admin Profile</button>
-                  <button type="button" class="btn btn-xs btn-secondary" onclick="editWorkingTeamStaff('${st.id}')">✎ Edit</button>
-                  <button type="button" class="btn btn-xs btn-secondary" onclick="filterTeamReportByStaff('${escapeHtmlText(st.name)}')">📊 Reports</button>
                 </div>
               </td>
             </tr>
           `;
         }).join("");
+        }
       }
 
       // 2. Render Staff-Wise Expense Summary Cards & Filtered Expense Report Table
       const summaryCardsEl = document.getElementById("wtStaffExpenseSummaryCards");
       if (summaryCardsEl) {
         summaryCardsEl.innerHTML = staffList.map(st => {
-          const stExps = expenses.filter(e => e.responsibleStaffName === st.name);
+          const stExps = expenses.filter(e => doesExpenseMatchStaff(e, st));
           const total = stExps.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+          const safeIdArg = escapeHtmlText(st.id).replace(/'/g, "");
           return `
-            <div style="padding:12px 14px;border-radius:10px;background:var(--bg-card);border:1px solid var(--border-color);">
+            <div onclick="filterTeamReportByStaff('${safeIdArg}')" style="cursor:pointer;padding:12px 14px;border-radius:10px;background:var(--bg-card);border:1px solid var(--border-color);" title="Filter report by ${escapeHtmlText(st.name)}">
               <div style="display:flex;justify-content:space-between;align-items:center;">
-                <strong style="font-size:13px;">👤 ${st.name}</strong>
+                <strong style="font-size:13px;">👤 ${escapeHtmlText(st.name)}</strong>
                 <span class="badge badge-orange">${stExps.length} Vouchers</span>
               </div>
-              <div style="font-size:10.5px;color:var(--text-muted);margin:2px 0 6px;">${st.role}</div>
+              <div style="font-size:10.5px;color:var(--text-muted);margin:2px 0 6px;">${escapeHtmlText(st.role)}</div>
               <div class="mono" style="font-size:16px;font-weight:800;color:var(--danger);">${formatBdt(total)}</div>
             </div>
           `;
         }).join("");
       }
 
-      const selExpStaff = document.getElementById("wtExpFilterStaff")?.value || "ALL";
       const selExpCat = document.getElementById("wtExpFilterCategory")?.value || "ALL";
       const filteredExps = expenses.filter(e =>
-        (selExpStaff === "ALL" || e.responsibleStaffName === selExpStaff) &&
+        matchesReportStaffFilter(
+          rawExpStaffSearch,
+          staffList.filter(st => doesExpenseMatchStaff(e, st)),
+          [e.responsibleStaffName, e.responsibleStaffRole, e.responsibleStaffId, e.staff, e.createdBy]
+        ) &&
         (selExpCat === "ALL" || e.category === selExpCat)
       );
 
@@ -9229,27 +9439,34 @@ const IMG = {
         wtExpBody.innerHTML = filteredExps.map(ex => `
           <tr>
             <td>
-              <div class="mono" style="font-weight:700;">${ex.id}</div>
-              <div style="font-size:10.5px;color:var(--text-muted);">${ex.date}</div>
+              <div class="mono" style="font-weight:700;">${escapeHtmlText(ex.id)}</div>
+              <div style="font-size:10.5px;color:var(--text-muted);">${escapeHtmlText(ex.date)}</div>
             </td>
             <td>
-              <div style="font-weight:700;">👤 ${ex.responsibleStaffName || "Nadia Sultana"}</div>
-              <div style="font-size:10.5px;color:var(--text-muted);">${ex.responsibleStaffRole || "Operations"}</div>
+              <div style="font-weight:700;">👤 ${escapeHtmlText(ex.responsibleStaffName || "Nadia Sultana")}</div>
+              <div style="font-size:10.5px;color:var(--text-muted);">${escapeHtmlText(ex.responsibleStaffRole || "Operations")}</div>
             </td>
-            <td style="font-weight:700;">${ex.title}</td>
-            <td style="font-size:11.5px;color:var(--text-secondary);max-width:280px;">${ex.details || ex.title}</td>
-            <td><span class="badge badge-orange">${ex.category}</span></td>
-            <td><span class="badge badge-blue">${ERP_DB.accounts[ex.account]?.name || ex.account}</span></td>
+            <td style="font-weight:700;">${escapeHtmlText(ex.title)}</td>
+            <td style="font-size:11.5px;color:var(--text-secondary);max-width:280px;">${escapeHtmlText(ex.details || ex.title)}</td>
+            <td><span class="badge badge-orange">${escapeHtmlText(ex.category)}</span></td>
+            <td><span class="badge badge-blue">${escapeHtmlText(ERP_DB.accounts[ex.account]?.name || ex.account)}</span></td>
             <td class="mono" style="font-weight:700;color:var(--danger);">${formatBdt(ex.amount)}</td>
           </tr>
-        `).join("") || `<tr><td colspan="7" style="text-align:center;padding:18px;color:var(--text-muted);">No matching expense records found for selected filter.</td></tr>`;
+        `).join("") || `<tr><td colspan="7" style="text-align:center;padding:18px;color:var(--text-muted);">${
+          rawExpStaffSearch
+            ? `No matching expense records found for "${escapeHtmlText(rawExpStaffSearch)}". <button type="button" class="btn btn-xs btn-secondary" style="margin-left:8px;" onclick="clearWorkingTeamSearchField('wtExpFilterStaff')">Clear Search</button>`
+            : "No matching expense records found for selected filter."
+        }</td></tr>`;
       }
 
       // 3. Render Working Team Payment Report (Advance Paid & Due Paid by Responsible Staff)
-      const selPayStaff = document.getElementById("wtPayFilterStaff")?.value || "ALL";
       const selPayType = document.getElementById("wtPayFilterType")?.value || "ALL";
       const filteredPays = payments.filter(p =>
-        (selPayStaff === "ALL" || p.advanceByStaff === selPayStaff || p.dueByStaff === selPayStaff) &&
+        matchesReportStaffFilter(
+          rawPayStaffSearch,
+          staffList.filter(st => doesPaymentMatchStaff(p, st)),
+          [p.advanceByStaff, p.dueByStaff, p.staff]
+        ) &&
         (selPayType === "ALL" || p.paymentType === selPayType)
       );
 
@@ -9258,42 +9475,59 @@ const IMG = {
         wtPayBody.innerHTML = filteredPays.map(p => `
           <tr>
             <td>
-              <div class="mono" style="font-weight:700;">${p.id}</div>
-              <div style="font-size:10.5px;color:var(--text-muted);">${p.date} • <span class="mono">${p.poId || "PO"}</span></div>
+              <div class="mono" style="font-weight:700;">${escapeHtmlText(p.id)}</div>
+              <div style="font-size:10.5px;color:var(--text-muted);">${escapeHtmlText(p.date)} • <span class="mono">${escapeHtmlText(p.poId || "PO")}</span></div>
             </td>
-            <td style="font-weight:700;">${p.supplierName}</td>
+            <td style="font-weight:700;">${escapeHtmlText(p.supplierName)}</td>
             <td>
-              <span class="badge ${p.paymentType === 'Advance Payment' ? 'badge-green' : 'badge-rose'}">${p.paymentType}</span>
+              <span class="badge ${p.paymentType === 'Advance Payment' ? 'badge-green' : 'badge-rose'}">${escapeHtmlText(p.paymentType)}</span>
             </td>
             <td>
-              <div style="font-weight:700;color:var(--status-green);">👤 ${p.advanceByStaff || "Nadia Sultana"}</div>
+              <div style="font-weight:700;color:var(--status-green);">👤 ${escapeHtmlText(p.advanceByStaff || "Nadia Sultana")}</div>
               <div style="font-size:10px;color:var(--text-muted);">Paid Advance</div>
             </td>
             <td>
-              <div style="font-weight:700;color:var(--accent-rose-deep);">👤 ${p.dueByStaff || "Farhan Islam"}</div>
+              <div style="font-weight:700;color:var(--accent-rose-deep);">👤 ${escapeHtmlText(p.dueByStaff || "Farhan Islam")}</div>
               <div style="font-size:10px;color:var(--text-muted);">Paid Due</div>
             </td>
-            <td><span class="badge badge-blue">${p.accountName || ERP_DB.accounts[p.accountKey]?.name || p.accountKey}</span></td>
-            <td style="font-size:11.5px;color:var(--text-secondary);max-width:250px;">${p.details || "—"}</td>
+            <td><span class="badge badge-blue">${escapeHtmlText(p.accountName || ERP_DB.accounts[p.accountKey]?.name || p.accountKey)}</span></td>
+            <td style="font-size:11.5px;color:var(--text-secondary);max-width:250px;">${escapeHtmlText(p.details || "—")}</td>
             <td class="mono" style="font-weight:800;">${formatBdt(p.amount)}</td>
           </tr>
-        `).join("") || `<tr><td colspan="8" style="text-align:center;padding:18px;color:var(--text-muted);">No matching payment records found for selected filter.</td></tr>`;
+        `).join("") || `<tr><td colspan="8" style="text-align:center;padding:18px;color:var(--text-muted);">${
+          rawPayStaffSearch
+            ? `No matching payment records found for "${escapeHtmlText(rawPayStaffSearch)}". <button type="button" class="btn btn-xs btn-secondary" style="margin-left:8px;" onclick="clearWorkingTeamSearchField('wtPayFilterStaff')">Clear Search</button>`
+            : "No matching payment records found for selected filter."
+        }</td></tr>`;
       }
       syncAllTopTableScrollbars();
     }
 
     function updateEmployeeStaffId(recordId, newStaffId) {
       const staffList = ERP_DB.staffMembers || [];
-      const st = staffList.find(x => x.id === recordId);
-      if (!st) return;
-      st.staffId = String(newStaffId || "").trim();
+      const st = findStaffRecord(staffList, recordId);
+      if (!st) {
+        showToast("Staff record not found.");
+        return;
+      }
+      const cleaned = String(newStaffId || "").trim();
+      if (cleaned) {
+        const dup = isStaffIdDuplicate(cleaned, st);
+        if (dup) {
+          showToast(`Staff ID "${cleaned}" is already assigned to ${dup.name}.`);
+          return;
+        }
+      }
+      const prevCustomId = getCleanStaffId(st);
+      st.staffId = cleaned;
+      cascadeStaffProfileUpdate(st, st.name, st.email, st.role, prevCustomId);
       saveErpDatabase();
       updateAdminProfileTopbar();
       renderAdminProfileDropdown();
       renderWorkingTeamModule();
       const editId = document.getElementById("wtStaffEditId")?.value || "";
       if (editId === st.id && document.getElementById("wtStaffIdInput")) {
-        document.getElementById("wtStaffIdInput").value = st.staffId;
+        document.getElementById("wtStaffIdInput").value = cleaned;
       }
       showToast(st.staffId ? `Assigned Staff ID "${st.staffId}" to ${st.name}` : `Cleared Staff ID for ${st.name}`);
     }
@@ -9306,41 +9540,312 @@ const IMG = {
       editWorkingTeamStaff(recordId);
     }
 
-    function editWorkingTeamStaff(staffId) {
-      const st = (ERP_DB.staffMembers || []).find(x => x.id === staffId);
-      if (!st) return;
+    function openWorkingTeamStaffModalDialog(focusEl) {
+      window.__suspendedErpModalIds = (window.__suspendedErpModalIds || []).filter(id => id !== "wtStaffEditorModal");
+      document.querySelectorAll(".erp-modal-backdrop.open, .modal-backdrop.open").forEach(m => m.classList.remove("open"));
+      const modalEl = document.getElementById("wtStaffEditorModal");
+      if (modalEl) {
+        modalEl.classList.add("open");
+        const modalBodyEl = modalEl.querySelector(".modal-body");
+        if (modalBodyEl) modalBodyEl.scrollTop = 0;
+      }
+      if (focusEl) {
+        try {
+          focusEl.focus({ preventScroll: true });
+        } catch (err) {
+          focusEl.focus();
+        }
+      }
+    }
+
+    function openCreateStaffModal() {
+      if (!hasWorkingTeamAccess()) {
+        showToast("🔒 Access Restricted: Working Team Admin permission required.");
+        return false;
+      }
       switchWtTab("staff");
-      if (document.getElementById("wtStaffEditId")) document.getElementById("wtStaffEditId").value = st.id;
-      if (document.getElementById("wtStaffTargetSelect")) document.getElementById("wtStaffTargetSelect").value = st.id;
-      if (document.getElementById("wtStaffIdInput")) document.getElementById("wtStaffIdInput").value = getCleanStaffId(st);
+      populateAllDynamicOptionSelects();
+      resetWorkingTeamStaffForm();
+      openWorkingTeamStaffModalDialog(document.getElementById("wtStaffName"));
+      return true;
+    }
+
+    function closeWorkingTeamStaffModal() {
+      window.__suspendedErpModalIds = (window.__suspendedErpModalIds || []).filter(id => id !== "wtStaffEditorModal");
+      const modalEl = document.getElementById("wtStaffEditorModal");
+      if (modalEl) modalEl.classList.remove("open");
+    }
+
+    function editWorkingTeamStaff(staffId) {
+      if (!hasWorkingTeamAccess()) {
+        showToast("🔒 Access Restricted: Working Team Admin permission required.");
+        return;
+      }
+      const st = findStaffRecord(ERP_DB.staffMembers || [], staffId);
+      if (!st) {
+        showToast("Staff member record not found.");
+        return;
+      }
+      switchWtTab("staff");
+      populateAllDynamicOptionSelects();
+      const editIdEl = document.getElementById("wtStaffEditId");
+      if (editIdEl) editIdEl.value = st.id;
+      const idInput = document.getElementById("wtStaffIdInput");
+      if (idInput) idInput.value = getCleanStaffId(st);
       if (document.getElementById("wtStaffName")) document.getElementById("wtStaffName").value = st.name || "";
       if (document.getElementById("wtStaffPhone")) document.getElementById("wtStaffPhone").value = st.phone || "";
       if (document.getElementById("wtStaffEmail")) document.getElementById("wtStaffEmail").value = st.email || "";
-      if (document.getElementById("wtStaffRole")) document.getElementById("wtStaffRole").value = st.role || "";
-      if (document.getElementById("wtStaffDept")) document.getElementById("wtStaffDept").value = st.dept || "";
-      if (document.getElementById("wtStaffStatus")) document.getElementById("wtStaffStatus").value = st.status || "Active";
-      const accSet = new Set(st.accesses || []);
+
+      const roleSel = document.getElementById("wtStaffRole");
+      if (roleSel && st.role) {
+        if (!Array.from(roleSel.options).some(o => o.value === st.role)) {
+          const opt = document.createElement("option");
+          opt.value = st.role;
+          opt.textContent = st.role;
+          const addOpt = roleSel.querySelector('option[value="__ADD_NEW__"]');
+          roleSel.insertBefore(opt, addOpt || null);
+        }
+        roleSel.value = st.role;
+      }
+
+      if (document.getElementById("wtStaffDept")) document.getElementById("wtStaffDept").value = st.dept || "Operations";
+      const shiftSel = document.getElementById("wtStaffShift");
+      if (shiftSel) shiftSel.value = normalizeStaffWorkingShift(st.shift);
+      if (document.getElementById("wtStaffPassword")) document.getElementById("wtStaffPassword").value = "";
+      const statusSel = document.getElementById("wtStaffStatus");
+      if (statusSel) {
+        const normStatus = normalizeStaffEmploymentStatus(st.status);
+        statusSel.value = STAFF_EMPLOYMENT_STATUS_OPTIONS.includes(normStatus) ? normStatus : "Permanent";
+      }
+
+      const accSet = new Set(getStaffAccessList(st));
       document.querySelectorAll("#wtAccessCheckboxes input[type='checkbox']").forEach(cb => {
         cb.checked = accSet.has(cb.value);
       });
+
+      const headingEl = document.getElementById("wtStaffFormHeading");
+      if (headingEl) headingEl.textContent = `✎ Edit Staff Profile: ${st.name}`;
+      const subEl = document.getElementById("wtStaffFormSubtitle");
+      const cleanId = getCleanStaffId(st);
+      if (subEl) subEl.textContent = `Editing ${st.name}${cleanId ? ` (Staff ID: ${cleanId})` : " (No Staff ID assigned yet)"} — ${st.email}`;
+      const badgeEl = document.getElementById("wtStaffFormBadge");
+      if (badgeEl) badgeEl.textContent = cleanId ? `Editing • ${cleanId}` : "Editing Staff";
       const btn = document.getElementById("wtStaffSubmitBtn");
       if (btn) btn.textContent = `✓ Update "${st.name}" Profile, Staff ID & Access`;
-      document.getElementById("wtStaffIdInput")?.focus();
+
+      const delBtn = document.getElementById("wtStaffDeleteBtn");
+      if (delBtn) {
+        const staffList = ERP_DB.staffMembers || [];
+        const activeStaff = getActiveAdminStaffRecord();
+        const isSelf = activeStaff && st.id === activeStaff.id;
+        const isOnly = staffList.length <= 1;
+        delBtn.style.display = "inline-flex";
+        delBtn.disabled = Boolean(isSelf || isOnly);
+        delBtn.style.opacity = delBtn.disabled ? "0.45" : "1";
+        delBtn.style.cursor = delBtn.disabled ? "not-allowed" : "pointer";
+        delBtn.title = isSelf
+          ? SELF_DELETE_BLOCKED_MSG
+          : isOnly
+            ? "At least 1 staff member must remain in the Working Team directory."
+            : `Permanently delete ${st.name}`;
+      }
+      const resetBtn = document.getElementById("wtStaffResetBtn");
+      if (resetBtn) resetBtn.style.display = "none";
+
+      openWorkingTeamStaffModalDialog(idInput);
       showToast(`Loaded "${st.name}" into Staff & Access Editor`);
     }
 
     function resetWorkingTeamStaffForm() {
       if (document.getElementById("wtStaffEditId")) document.getElementById("wtStaffEditId").value = "";
-      if (document.getElementById("wtStaffTargetSelect")) document.getElementById("wtStaffTargetSelect").value = "";
       if (document.getElementById("wtStaffIdInput")) document.getElementById("wtStaffIdInput").value = "";
       if (document.getElementById("wtStaffName")) document.getElementById("wtStaffName").value = "";
       if (document.getElementById("wtStaffPhone")) document.getElementById("wtStaffPhone").value = "";
       if (document.getElementById("wtStaffEmail")) document.getElementById("wtStaffEmail").value = "";
+      if (document.getElementById("wtStaffDept")) document.getElementById("wtStaffDept").value = "";
+      if (document.getElementById("wtStaffShift")) document.getElementById("wtStaffShift").value = "Full-Time (Day Shift)";
+      if (document.getElementById("wtStaffStatus")) document.getElementById("wtStaffStatus").value = "Permanent";
+      if (document.getElementById("wtStaffPassword")) document.getElementById("wtStaffPassword").value = "";
+      const roleSel = document.getElementById("wtStaffRole");
+      if (roleSel) {
+        const firstReal = Array.from(roleSel.options).find(o => o.value && o.value !== "__ADD_NEW__");
+        if (firstReal) roleSel.value = firstReal.value;
+        const defaultAccs = new Set(ROLE_DEFAULT_ACCESS_MAP[roleSel.value] || ["Dashboard & BI"]);
+        document.querySelectorAll("#wtAccessCheckboxes input[type='checkbox']").forEach(cb => {
+          cb.checked = defaultAccs.has(cb.value);
+        });
+      }
+      const headingEl = document.getElementById("wtStaffFormHeading");
+      if (headingEl) headingEl.textContent = "Create Staff & Assign Roles / Accesses";
+      const subEl = document.getElementById("wtStaffFormSubtitle");
+      if (subEl) subEl.textContent = "Add team members, define custom roles, and assign module access permissions";
+      const badgeEl = document.getElementById("wtStaffFormBadge");
+      if (badgeEl) badgeEl.textContent = "RBAC & Team Sync";
       const btn = document.getElementById("wtStaffSubmitBtn");
       if (btn) btn.textContent = "+ Save Staff & Assign Role / Access";
+      const resetBtn = document.getElementById("wtStaffResetBtn");
+      if (resetBtn) resetBtn.style.display = "";
+      const delBtn = document.getElementById("wtStaffDeleteBtn");
+      if (delBtn) delBtn.style.display = "none";
     }
 
-    function filterTeamReportByStaff(staffName) {
+    function matchesStaffSearchQuery(st, rawQuery) {
+      const q = String(rawQuery || "").trim().toLowerCase();
+      if (!q) return true;
+      const customId = getCleanStaffId(st);
+      const accesses = Array.isArray(st.accesses) ? st.accesses : (ROLE_DEFAULT_ACCESS_MAP[st.role] || []);
+      const searchable = [
+        st.name,
+        customId,
+        st.phone,
+        st.email,
+        st.role,
+        st.dept,
+        st.shift,
+        st.status,
+        accesses.join(" ")
+      ]
+        .map(v => String(v || "").toLowerCase())
+        .join(" ");
+      const phoneDigits = String(st.phone || "").replace(/[^0-9]/g, "");
+      const tokens = q.split(/\s+/).filter(Boolean);
+      return tokens.every(tok => {
+        if (searchable.includes(tok)) return true;
+        const tokDigits = tok.replace(/[^0-9]/g, "");
+        return tokDigits.length >= 3 && phoneDigits.includes(tokDigits);
+      });
+    }
+
+    function syncWorkingTeamSearchClear(inputId, clearBtnId) {
+      const val = (document.getElementById(inputId)?.value || "").trim();
+      const rawQuery = val.toLowerCase() === "all" ? "" : val;
+      const clearBtn = document.getElementById(clearBtnId);
+      if (clearBtn) {
+        clearBtn.style.display = rawQuery ? "inline-flex" : "none";
+      }
+      return rawQuery;
+    }
+
+    function matchesReportStaffFilter(rawQuery, matchedStaffMembers, fallbackFields) {
+      const q = String(rawQuery || "").trim().toLowerCase();
+      if (!q || q === "all") return true;
+      if (Array.isArray(matchedStaffMembers) && matchedStaffMembers.some(st => matchesStaffSearchQuery(st, q))) {
+        return true;
+      }
+      const fallbackText = (fallbackFields || [])
+        .map(v => String(v || "").toLowerCase())
+        .join(" ");
+      const tokens = q.split(/\s+/).filter(Boolean);
+      return tokens.length > 0 && tokens.every(tok => fallbackText.includes(tok));
+    }
+
+    function clearWorkingTeamSearchField(inputId) {
+      const input = document.getElementById(inputId);
+      if (input) input.value = "";
+      renderWorkingTeamModule();
+      if (input) input.focus();
+    }
+
+    function clearWorkingTeamStaffSearch() {
+      clearWorkingTeamSearchField("wtStaffSearchInput");
+    }
+
+    function deleteWorkingTeamStaff(staffId) {
+      if (!hasWorkingTeamAccess()) {
+        showToast("🔒 Access Restricted: Working Team Admin permission required.");
+        return;
+      }
+      const staffList = (ERP_DB && Array.isArray(ERP_DB.staffMembers)) ? ERP_DB.staffMembers : [];
+      const st = findStaffRecord(staffList, staffId);
+      if (!st) {
+        showToast("Error: Selected staff member could not be found.");
+        return;
+      }
+      const activeStaff = getActiveAdminStaffRecord();
+      if (activeStaff && st.id === activeStaff.id) {
+        showToast(SELF_DELETE_BLOCKED_MSG);
+        return;
+      }
+      if (staffList.length <= 1) {
+        showToast("At least 1 staff member must remain in the Working Team directory.");
+        return;
+      }
+
+      const cleanId = getCleanStaffId(st);
+      const idText = cleanId ? ` (${cleanId})` : "";
+      openModal({
+        title: "Delete Staff Member?",
+        message: `Are you sure you want to permanently delete "${st.name}"${idText} (${st.email}) from the Working Team? Historical expense vouchers and supplier payments remain preserved in financial audit logs.`,
+        confirmText: "Yes, Delete Staff",
+        onConfirm: () => performDeleteWorkingTeamStaff(st.id)
+      });
+    }
+
+    function performDeleteWorkingTeamStaff(staffId) {
+      if (!hasWorkingTeamAccess()) {
+        showToast("🔒 Access Restricted: Working Team Admin permission required.");
+        return false;
+      }
+      if (!ERP_DB || !Array.isArray(ERP_DB.staffMembers)) return false;
+      const idx = ERP_DB.staffMembers.findIndex(s => s.id === staffId || s.dbId === staffId);
+      if (idx === -1) {
+        showToast("Error: Staff member was already removed.");
+        return true;
+      }
+      const st = ERP_DB.staffMembers[idx];
+      const activeStaff = getActiveAdminStaffRecord();
+      if (activeStaff && st.id === activeStaff.id) {
+        showToast(SELF_DELETE_BLOCKED_MSG);
+        return false;
+      }
+      if (ERP_DB.staffMembers.length <= 1) {
+        showToast("At least 1 staff member must remain in the Working Team directory.");
+        return false;
+      }
+
+      const deleteKeys = [st.dbId, st.id].map(x => String(x || "").trim()).filter(Boolean);
+      const existingQueue = Array.isArray(ERP_DB.__deletedStaffIds) ? ERP_DB.__deletedStaffIds : [];
+      ERP_DB.__deletedStaffIds = Array.from(new Set([...existingQueue, ...deleteKeys]));
+
+      ERP_DB.staffMembers = ERP_DB.staffMembers.filter((_, i) => i !== idx);
+
+      // Clear deleted staff FK pointers locally while keeping financial vouchers intact
+      if (Array.isArray(ERP_DB.expenses)) {
+        ERP_DB.expenses.forEach(ex => {
+          if (doesExpenseMatchStaff(ex, st)) {
+            ex.responsibleStaffId = "";
+            ex.responsibleStaffName = "Unassigned / Former Staff";
+            ex.responsibleStaffRole = "Former / Unassigned";
+          }
+        });
+      }
+
+      const wtEditEl = document.getElementById("wtStaffEditId");
+      if (wtEditEl && wtEditEl.value && (wtEditEl.value === st.id || wtEditEl.value === st.dbId)) {
+        resetWorkingTeamStaffForm();
+        closeWorkingTeamStaffModal();
+      }
+
+      ["wtExpFilterStaff", "wtPayFilterStaff"].forEach(inputId => {
+        const filterEl = document.getElementById(inputId);
+        if (filterEl && st.name && filterEl.value.trim().toLowerCase() === st.name.trim().toLowerCase()) {
+          filterEl.value = "";
+        }
+      });
+
+      saveErpDatabase({ immediate: true });
+      renderAllErpModules();
+      showToast(`Deleted staff member "${st.name}"`);
+      return true;
+    }
+
+    function filterTeamReportByStaff(staffRef) {
+      if (!hasWorkingTeamAccess()) {
+        showToast("🔒 Access Restricted: Working Team Admin permission required.");
+        return;
+      }
+      const st = findStaffRecord(ERP_DB.staffMembers || [], staffRef);
+      const staffName = st ? st.name : staffRef;
       switchWtTab("expenses");
       const expFilter = document.getElementById("wtExpFilterStaff");
       if (expFilter) expFilter.value = staffName;
@@ -11611,20 +12116,40 @@ const IMG = {
         window.__TEHZIB_INITIAL_MODE__ === "admin" || window.location.pathname.startsWith("/admin");
       const srvAdmin = window.__TEHZIB_INITIAL_SERVER_STATE__?.adminSession;
       if (srvAdmin) {
-        unlockErpWorkspace(
-          {
-            id: srvAdmin.email || srvAdmin.name,
-            role: srvAdmin.role,
-            avatar: srvAdmin.avatar || "TA"
-          },
-          isInitialAdminRoute
-        );
-      } else {
-        const savedSession = localStorage.getItem(AUTH_SESSION_KEY);
-        if (savedSession) {
-          const parsedSess = JSON.parse(savedSession);
-          if (parsedSess && parsedSess.id) unlockErpWorkspace(parsedSess, isInitialAdminRoute);
+        const srvStaff =
+          findStaffRecord(ERP_DB?.staffMembers || [], srvAdmin.staffId) ||
+          findStaffRecord(ERP_DB?.staffMembers || [], srvAdmin.email);
+        if (srvStaff && srvStaff.status !== "Inactive") {
+          const resolvedAccesses = convertServerPermissionsToLabels(srvAdmin.permissions, srvAdmin.role || srvStaff.role);
+          srvStaff.role = srvAdmin.role || srvStaff.role;
+          srvStaff.accesses = resolvedAccesses;
+          unlockErpWorkspace(
+            {
+              staffId: srvStaff.id,
+              customStaffId: getCleanStaffId(srvStaff),
+              id: srvStaff.email,
+              name: srvStaff.name,
+              phone: srvStaff.phone,
+              role: srvStaff.role,
+              dept: srvStaff.dept,
+              shift: srvStaff.shift,
+              status: srvStaff.status,
+              avatar: srvAdmin.avatar || srvStaff.avatar || getStaffInitials(srvStaff.name),
+              accesses: resolvedAccesses
+            },
+            isInitialAdminRoute
+          );
+        } else {
+          lockErpWorkspace({ silent: true, stayInStorefront: !isInitialAdminRoute });
         }
+      } else {
+        window.__erpAdminAuthenticated = false;
+        window.__erpSessionObj = null;
+        document.querySelectorAll(".erp-view").forEach(v => v.classList.remove("active"));
+        document.querySelectorAll("#erpSidebar .erp-nav-btn").forEach(b => b.classList.remove("active"));
+        try {
+          localStorage.removeItem(AUTH_SESSION_KEY);
+        } catch (err) {}
       }
       if (isInitialAdminRoute) {
         switchWorkspaceMode("admin");
@@ -11655,7 +12180,12 @@ const IMG = {
     window.previewFooterInfoPopup = previewFooterInfoPopup;
     window.deleteFooterLinkItem = deleteFooterLinkItem;
     window.triggerMultiChannelSync = triggerMultiChannelSync;
+    window.openCreateStaffModal = openCreateStaffModal;
+    window.closeWorkingTeamStaffModal = closeWorkingTeamStaffModal;
     window.editWorkingTeamStaff = editWorkingTeamStaff;
+    window.deleteWorkingTeamStaff = deleteWorkingTeamStaff;
+    window.clearWorkingTeamSearchField = clearWorkingTeamSearchField;
+    window.clearWorkingTeamStaffSearch = clearWorkingTeamStaffSearch;
     window.resetWorkingTeamStaffForm = resetWorkingTeamStaffForm;
     window.handleWtStaffTargetSelect = handleWtStaffTargetSelect;
     window.updateEmployeeStaffId = updateEmployeeStaffId;
@@ -11667,15 +12197,9 @@ const IMG = {
     window.openCreateCustomOptionModal = openCreateCustomOptionModal;
     window.handleDynamicSelectAddNew = handleDynamicSelectAddNew;
     window.lockErpWorkspace = lockErpWorkspace;
-    window.switchActiveErpStaffProfile = switchActiveErpStaffProfile;
-    window.openAdminProfileModal = openAdminProfileModal;
-    window.closeAdminProfileModal = closeAdminProfileModal;
-    window.setAllModalProfileAccesses = setAllModalProfileAccesses;
-    window.applyDefaultRoleAccessesInModal = applyDefaultRoleAccessesInModal;
     window.toggleAdminProfileDropdown = toggleAdminProfileDropdown;
     window.closeAdminProfileDropdown = closeAdminProfileDropdown;
     window.updateSidebarRbacState = updateSidebarRbacState;
-    window.saveAdminProfileModalForm = saveAdminProfileModalForm;
     window.ROLE_DEFAULT_ACCESS_MAP = ROLE_DEFAULT_ACCESS_MAP;
     window.OPERATIONAL_ROLES = OPERATIONAL_ROLES;
     window.ALL_ERP_MODULES = ALL_ERP_MODULES;

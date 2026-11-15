@@ -21,17 +21,21 @@ declare global {
       wishlist?: string[];
       appMode?: "storefront" | "admin";
     }) => void;
-    __tehzibScheduleServerSync?: (payload: {
-      erpDb?: Record<string, any>;
-      logos?: { light?: string; dark?: string };
-      notifications?: Array<Record<string, any>>;
-    }) => void;
+    __tehzibScheduleServerSync?: (
+      payload: {
+        erpDb?: Record<string, any>;
+        logos?: { light?: string; dark?: string };
+        notifications?: Array<Record<string, any>>;
+        deletedStaffIds?: string[];
+      },
+      options?: { immediate?: boolean },
+    ) => void;
     __tehzibRuntimeLoaded?: boolean;
     __tehzibRuntimeVersion?: string;
   }
 }
 
-const RUNTIME_VERSION = "69";
+const RUNTIME_VERSION = "79";
 const STATIC_MARKUP = { __html: PLATFORM_HTML_MARKUP };
 
 /**
@@ -51,6 +55,18 @@ const TehzibStaticDomShell = React.memo(
   () => true,
 );
 
+type SyncPayload = {
+  erpDb?: Record<string, any>;
+  logos?: { light?: string; dark?: string };
+  notifications?: Array<Record<string, any>>;
+  deletedStaffIds?: string[];
+};
+
+type QueuedSyncEntry = {
+  payload: SyncPayload;
+  seq: number;
+};
+
 export function TehzibPlatformClient({
   initialData,
   initialMode = "storefront",
@@ -60,6 +76,10 @@ export function TehzibPlatformClient({
 }) {
   const queryClient = useQueryClient();
   const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const syncSeqRef = useRef(0);
+  const inFlightRef = useRef(false);
+  const timerPendingRef = useRef(false);
+  const pendingSyncRef = useRef<QueuedSyncEntry | null>(null);
 
   // TanStack Query cache for PostgreSQL-hydrated platform state
   useQuery({
@@ -75,28 +95,116 @@ export function TehzibPlatformClient({
 
   // TanStack Query mutation for persisting Storefront & ERP changes to PostgreSQL
   const persistMutation = useMutation({
-    mutationFn: async (payload: {
-      erpDb?: Record<string, any>;
-      logos?: { light?: string; dark?: string };
-      notifications?: Array<Record<string, any>>;
-    }) => {
+    mutationFn: async ({ payload, seq }: QueuedSyncEntry) => {
+      const staffList = Array.isArray(payload.erpDb?.staffMembers)
+        ? payload.erpDb.staffMembers
+        : [];
+      const sentPasswords = staffList
+        .filter((st: any) => typeof st?.newPassword === "string" && st.newPassword.length >= 4)
+        .map((st: any) => ({
+          id: st.id || st.dbId || "",
+          email: (st.email || "").trim().toLowerCase(),
+          newPassword: String(st.newPassword),
+        }));
+      const sentDeletedStaffIds = Array.from(
+        new Set(
+          [
+            ...(Array.isArray(payload.deletedStaffIds) ? payload.deletedStaffIds : []),
+            ...(Array.isArray(payload.erpDb?.__deletedStaffIds)
+              ? payload.erpDb.__deletedStaffIds
+              : []),
+          ]
+            .map((id) => String(id || "").trim())
+            .filter(Boolean),
+        ),
+      );
+
       const res = await fetch("/api/platform", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(
+          sentDeletedStaffIds.length > 0
+            ? { ...payload, deletedStaffIds: sentDeletedStaffIds }
+            : payload,
+        ),
       });
-      if (!res.ok) throw new Error("Failed to sync with PostgreSQL");
-      return res.json();
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(json?.error || "Failed to sync with PostgreSQL");
+      }
+      return { json, seq, sentPasswords, sentDeletedStaffIds };
     },
-    onSuccess: (json) => {
-      if (json?.data) {
+    onSuccess: ({ json, seq, sentPasswords, sentDeletedStaffIds }) => {
+      const liveErpDb = (window as any).ERP_DB;
+      // Clear already-committed staff deletions so a subsequent sync preserves newer deletes only
+      if (liveErpDb && Array.isArray(liveErpDb.__deletedStaffIds) && sentDeletedStaffIds.length > 0) {
+        const sentDelSet = new Set(sentDeletedStaffIds);
+        liveErpDb.__deletedStaffIds = liveErpDb.__deletedStaffIds.filter(
+          (id: any) => !sentDelSet.has(String(id || "").trim()),
+        );
+        try {
+          localStorage.setItem("tehzib_unified_ems_v8", JSON.stringify(liveErpDb));
+        } catch {}
+      }
+
+      // Clear already-persisted one-time passwords without touching newer edits
+      const liveStaff = liveErpDb?.staffMembers;
+      if (Array.isArray(liveStaff) && sentPasswords.length > 0) {
+        for (const sent of sentPasswords) {
+          const match = liveStaff.find(
+            (st: any) =>
+              (sent.id && (st.id === sent.id || st.dbId === sent.id)) ||
+              (sent.email && (st.email || "").trim().toLowerCase() === sent.email),
+          );
+          if (match && match.newPassword === sent.newPassword) {
+            delete match.newPassword;
+          }
+        }
+      }
+
+      // Guard against stale responses overwriting newer queued/pending client mutations
+      const isLatest = seq === syncSeqRef.current && !pendingSyncRef.current;
+      if (isLatest && json?.data) {
         queryClient.setQueryData(["tehzib-platform-state"], json.data);
+        if (window.__TEHZIB_INITIAL_SERVER_STATE__ && json.data.erpDb) {
+          window.__TEHZIB_INITIAL_SERVER_STATE__.erpDb = json.data.erpDb;
+        }
+        if (
+          typeof (window as any).__tehzibApplyServerStaffSync === "function" &&
+          Array.isArray(json.data.erpDb?.staffMembers)
+        ) {
+          (window as any).__tehzibApplyServerStaffSync(
+            json.data.erpDb.staffMembers,
+            json.data.erpDb.staffRoles,
+          );
+        }
+      }
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : "Failed to sync changes with PostgreSQL";
+      if (typeof (window as any).showToast === "function") {
+        (window as any).showToast(msg, "error");
+      }
+    },
+    onSettled: () => {
+      inFlightRef.current = false;
+      if (pendingSyncRef.current && !timerPendingRef.current) {
+        flushPendingSyncRef.current();
       }
     },
   });
 
   const persistMutateRef = useRef(persistMutation.mutate);
   persistMutateRef.current = persistMutation.mutate;
+
+  const flushPendingSyncRef = useRef(() => {});
+  flushPendingSyncRef.current = () => {
+    if (inFlightRef.current || !pendingSyncRef.current) return;
+    const nextEntry = pendingSyncRef.current;
+    pendingSyncRef.current = null;
+    inFlightRef.current = true;
+    persistMutateRef.current(nextEntry);
+  };
 
   useEffect(() => {
     window.__TEHZIB_INITIAL_SERVER_STATE__ = initialData;
@@ -120,10 +228,23 @@ export function TehzibPlatformClient({
       if (partial.appMode) store.setAppMode(partial.appMode);
     };
 
-    window.__tehzibScheduleServerSync = (payload) => {
-      if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+    window.__tehzibScheduleServerSync = (payload, options) => {
+      syncSeqRef.current += 1;
+      pendingSyncRef.current = { payload, seq: syncSeqRef.current };
+      if (syncTimerRef.current) {
+        clearTimeout(syncTimerRef.current);
+        syncTimerRef.current = null;
+      }
+      if (options?.immediate) {
+        timerPendingRef.current = false;
+        flushPendingSyncRef.current();
+        return;
+      }
+      timerPendingRef.current = true;
       syncTimerRef.current = setTimeout(() => {
-        persistMutateRef.current(payload);
+        timerPendingRef.current = false;
+        syncTimerRef.current = null;
+        flushPendingSyncRef.current();
       }, 250);
     };
 

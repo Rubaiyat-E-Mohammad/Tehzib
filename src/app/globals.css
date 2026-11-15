@@ -4586,7 +4586,7 @@
       gap: 16px;
       position: sticky;
       top: 0;
-      z-index: 25;
+      z-index: 900;
     }
 
     .erp-topbar-left {
@@ -5223,7 +5223,7 @@
       font-size: 0.83rem;
       font-weight: 600;
       box-shadow: var(--shadow-lg);
-      z-index: 1400;
+      z-index: 2100;
       opacity: 0;
       transform: translateY(12px);
       pointer-events: none;
@@ -6699,7 +6699,10 @@ input[type="checkbox"]::before {
 
 /* 1. Large / Ultra-Wide Screens (1600px+, 1920px, 2560px+ 2K/4K) */
 #prodSearchInput,
-#orderSearchInput {
+#orderSearchInput,
+#wtStaffSearchInput,
+#wtExpFilterStaff,
+#wtPayFilterStaff {
   min-width: clamp(235px, 18vw, 350px) !important;
   width: auto !important;
 }
@@ -7103,6 +7106,10 @@ input[type="checkbox"]::before {
 
   #prodSearchInput,
   #orderSearchInput,
+  #wtStaffSearchInput,
+  #wtExpFilterStaff,
+  #wtPayFilterStaff,
+  .wt-search-input-wrap,
   #auditFilterDateSelect {
     width: 100% !important;
     min-width: 0 !important;
@@ -7330,25 +7337,9 @@ input[type="checkbox"]::before {
 
 .erp-dd-footer-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 8px;
   background: var(--bg-card);
-}
-
-#ddSignOutBtn {
-  transition: none !important;
-}
-
-#ddSignOutBtn:hover,
-#ddSignOutBtn:active,
-#ddSignOutBtn:focus {
-  background: var(--accent-rose) !important;
-  color: #181214 !important;
-  transform: none !important;
-  box-shadow: none !important;
-  filter: none !important;
-  opacity: 1 !important;
-  outline: none !important;
 }
 
 .erp-nav-btn.rbac-locked {

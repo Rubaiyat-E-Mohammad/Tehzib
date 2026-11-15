@@ -23,6 +23,7 @@ export const PUT = handle(async (req) => {
     erpDb?: Record<string, any>;
     logos?: { light?: string; dark?: string };
     notifications?: Array<Record<string, any>>;
+    deletedStaffIds?: string[];
   } | null;
 
   if (!body || typeof body !== "object") {
@@ -73,7 +74,8 @@ export const PUT = handle(async (req) => {
     }
   }
 
-  await persistPlatformStateToPostgres(body);
+  const adminSession = await getAdminSession();
+  await persistPlatformStateToPostgres(body, adminSession);
   const fresh = await buildHydratedPlatformState();
   return ok(fresh);
 });

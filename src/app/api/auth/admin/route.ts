@@ -40,9 +40,17 @@ export const POST = handle(async (req) => {
     throw new ApiError(401, "Invalid Admin ID/Email or Password");
   }
 
+  if (staff.status === "INACTIVE") {
+    throw new ApiError(403, "This staff account is inactive. Contact Working Team Admin.");
+  }
+
   const defaultPass = process.env.SEED_ADMIN_PASSWORD || "Tehzib@2027";
-  const validPass =
-    password === defaultPass || (await bcrypt.compare(password, staff.passwordHash).catch(() => false));
+  const hasRealBcryptHash =
+    typeof staff.passwordHash === "string" &&
+    /^\$2[aby]\$\d{2}\$.{53}$/.test(staff.passwordHash);
+  const validPass = hasRealBcryptHash
+    ? await bcrypt.compare(password, staff.passwordHash).catch(() => false)
+    : password === defaultPass;
 
   if (!validPass) {
     throw new ApiError(401, "Invalid Admin ID/Email or Password");

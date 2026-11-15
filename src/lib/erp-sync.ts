@@ -1,3 +1,5 @@
+import bcrypt from "bcryptjs";
+import { ApiError } from "@/lib/api";
 import { db } from "@/lib/db";
 import {
   ProductStatus,
@@ -18,7 +20,76 @@ import {
   FooterLinkType,
   StockMovementType,
 } from "@prisma/client";
-import { LEGACY_ACCESS_LABELS, moduleLabel } from "@/lib/rbac";
+import { type AdminSession } from "@/lib/auth";
+import { ALL_MODULE_KEYS, hasPermission, LEGACY_ACCESS_LABELS, moduleLabel } from "@/lib/rbac";
+
+function expandStaffPermissionKeys(perms: string[]): string[] {
+  const expanded = perms.flatMap((x) => {
+    const key: string = LEGACY_ACCESS_LABELS[x] || x;
+    return key === "*" ? [...ALL_MODULE_KEYS] : [key];
+  });
+  return Array.from(new Set(expanded)).sort();
+}
+
+const STAFF_SHIFT_OPTIONS = [
+  "Full-Time (Day Shift)",
+  "Full-Time (Night Shift)",
+  "Part-Time (Day Shift)",
+  "Part-Time (Night Shift)",
+  "Remote (Day Shift)",
+  "Remote (Night Shift)",
+] as const;
+
+const STAFF_STATUS_DISPLAY: Record<StaffStatus, string> = {
+  ACTIVE: "Permanent",
+  ON_LEAVE: "On Leave",
+  INACTIVE: "Inactive",
+  INTERNSHIP: "Internship",
+  PROBATION: "Probation",
+  PERMANENT: "Permanent",
+  NOTICE_PERIOD: "Notice Period",
+  CONTRACTUAL: "Contractual",
+};
+
+function staffStatusToLabel(status: StaffStatus): string {
+  return STAFF_STATUS_DISPLAY[status] || "Permanent";
+}
+
+function labelToStaffStatus(raw: string | null | undefined): StaffStatus {
+  const clean = String(raw || "").trim().toLowerCase().replace(/[\s_-]+/g, " ");
+  if (clean === "internship") return StaffStatus.INTERNSHIP;
+  if (clean === "probation") return StaffStatus.PROBATION;
+  if (clean === "notice period") return StaffStatus.NOTICE_PERIOD;
+  if (clean === "contractual") return StaffStatus.CONTRACTUAL;
+  if (clean === "on leave") return StaffStatus.ON_LEAVE;
+  if (clean === "inactive") return StaffStatus.INACTIVE;
+  return StaffStatus.PERMANENT;
+}
+
+function normalizeStaffShift(raw: string | null | undefined): string {
+  const clean = String(raw || "").trim();
+  if (!clean) return "Full-Time (Day Shift)";
+  const exact = STAFF_SHIFT_OPTIONS.find((opt) => opt.toLowerCase() === clean.toLowerCase());
+  if (exact) return exact;
+  const lower = clean.toLowerCase();
+  const isNight = lower.includes("night");
+  if (lower.includes("remote")) return isNight ? "Remote (Night Shift)" : "Remote (Day Shift)";
+  if (lower.includes("part")) return isNight ? "Part-Time (Night Shift)" : "Part-Time (Day Shift)";
+  return isNight ? "Full-Time (Night Shift)" : "Full-Time (Day Shift)";
+}
+
+function initialsFromName(name: string | null | undefined, fallback = "ST"): string {
+  const parts = String(name || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (!parts.length) return fallback;
+  return parts
+    .map((w) => w[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
 
 function slugify(input: string): string {
   return input
@@ -170,7 +241,7 @@ export async function buildHydratedPlatformState() {
     db.staffRole.findMany({ orderBy: { name: "asc" } }),
     db.staff.findMany({
       include: { role: true },
-      orderBy: { code: "asc" },
+      orderBy: [{ createdAt: "asc" }, { code: "asc" }],
     }),
     db.expense.findMany({
       include: { staff: { include: { role: true } } },
@@ -463,13 +534,17 @@ export async function buildHydratedPlatformState() {
     const cleanCode = st.code && !/^stf-/i.test(st.code) && !/^staff_/i.test(st.code) ? st.code : "";
     return {
       id: st.id,
+      dbId: st.id,
       staffId: cleanCode,
+      loginId: st.loginId || undefined,
       name: st.name,
       phone: st.phone || "",
       email: st.email,
       role: st.role.name,
       dept: st.dept || "Operations",
-      status: st.status === StaffStatus.ACTIVE ? "Active" : "Inactive",
+      shift: normalizeStaffShift(st.shift),
+      avatar: st.avatar || initialsFromName(st.name),
+      status: staffStatusToLabel(st.status),
       accesses: st.permissions.includes("*")
         ? Object.keys(LEGACY_ACCESS_LABELS)
         : st.permissions.map((k) => moduleLabel(k)),
@@ -478,7 +553,7 @@ export async function buildHydratedPlatformState() {
 
   const erpExpenses = expenses.map((ex) => {
     const rawCode = ex.staff?.code || "";
-    const cleanStaffCode = rawCode && !/^stf-/i.test(rawCode) ? rawCode : (ex.staff?.id || "staff_tahmid");
+    const cleanStaffCode = rawCode && !/^stf-/i.test(rawCode) ? rawCode : (ex.staff?.id || "");
     return {
       id: ex.number,
       date: fmtDateStr(ex.date, false),
@@ -486,9 +561,9 @@ export async function buildHydratedPlatformState() {
       details: ex.details || ex.title,
       category: ex.category,
       account: ex.accountId || "acc_cash",
-      responsibleStaffId: cleanStaffCode,
-      responsibleStaffName: ex.staff?.name || "Tahmid Alvi",
-      responsibleStaffRole: ex.staff?.role.name || "Founder & Store Owner",
+      responsibleStaffId: ex.staff ? cleanStaffCode : "",
+      responsibleStaffName: ex.staff?.name || "Unassigned / Former Staff",
+      responsibleStaffRole: ex.staff?.role.name || "Former / Unassigned",
       amount: ex.amount,
     };
   });
@@ -626,24 +701,32 @@ let persistPlatformQueue: Promise<unknown> = Promise.resolve();
  * Persists mutated ERP_DB + Storefront state back to PostgreSQL inside an ACID transaction.
  * Serialized sequentially so overlapping autosaves cannot collide on SELECT/INSERT upserts.
  */
-export async function persistPlatformStateToPostgres(payload: {
-  erpDb?: Record<string, any>;
-  logos?: { light?: string; dark?: string };
-  notifications?: Array<Record<string, any>>;
-}) {
+export async function persistPlatformStateToPostgres(
+  payload: {
+    erpDb?: Record<string, any>;
+    logos?: { light?: string; dark?: string };
+    notifications?: Array<Record<string, any>>;
+    deletedStaffIds?: string[];
+  },
+  adminSession: AdminSession | null = null,
+) {
   const run = persistPlatformQueue.then(
-    () => persistPlatformStateInner(payload),
-    () => persistPlatformStateInner(payload),
+    () => persistPlatformStateInner(payload, adminSession),
+    () => persistPlatformStateInner(payload, adminSession),
   );
   persistPlatformQueue = run.catch(() => undefined);
   return run;
 }
 
-async function persistPlatformStateInner(payload: {
-  erpDb?: Record<string, any>;
-  logos?: { light?: string; dark?: string };
-  notifications?: Array<Record<string, any>>;
-}) {
+async function persistPlatformStateInner(
+  payload: {
+    erpDb?: Record<string, any>;
+    logos?: { light?: string; dark?: string };
+    notifications?: Array<Record<string, any>>;
+    deletedStaffIds?: string[];
+  },
+  adminSession: AdminSession | null = null,
+) {
   const erp = payload.erpDb;
   if (!erp) return;
 
@@ -1334,11 +1417,268 @@ async function persistPlatformStateInner(payload: {
         }
       }
 
-      // 11. Expenses
+      // 11. Staff Roles & Members (sync before Expenses & Payments so new/renamed staff FKs resolve)
+      const hasTeamAdmin = Boolean(adminSession && hasPermission(adminSession.permissions, "team"));
+
+      if (hasTeamAdmin && Array.isArray(erp.staffRoles)) {
+        for (const rawRoleName of erp.staffRoles) {
+          const rName = String(rawRoleName || "").trim();
+          if (!rName) continue;
+          await tx.staffRole.upsert({
+            where: { name: rName },
+            create: {
+              name: rName,
+              permissions: rName.toLowerCase().includes("founder") ? ["*"] : ["dashboard"],
+            },
+            update: {},
+          });
+        }
+      }
+
+      // Apply explicit staff deletions before upserting remaining/new members so freed emails/Staff IDs can be reused immediately.
+      const keptStaffIds = new Set<string>();
+      if (Array.isArray(erp.staffMembers)) {
+        for (const st of erp.staffMembers) {
+          if (st?.dbId) keptStaffIds.add(String(st.dbId).trim());
+          if (st?.id) keptStaffIds.add(String(st.id).trim());
+        }
+      }
+      const explicitDeleteIds = [
+        ...(Array.isArray(payload.deletedStaffIds) ? payload.deletedStaffIds : []),
+        ...(Array.isArray(erp.__deletedStaffIds) ? erp.__deletedStaffIds : []),
+      ]
+        .map((id) => String(id || "").trim())
+        .filter(Boolean);
+      if (explicitDeleteIds.length > 0) {
+        if (!adminSession) {
+          throw new ApiError(403, "Admin authentication required to delete staff members.");
+        }
+        if (!hasTeamAdmin) {
+          throw new ApiError(403, "Working Team Admin permission required to delete staff members.");
+        }
+      }
+      const rawDeleteIds = explicitDeleteIds.filter((id) => !keptStaffIds.has(id));
+      const uniqueDeleteIds = Array.from(new Set(rawDeleteIds));
+      if (uniqueDeleteIds.length > 0) {
+        const existingStaffRows = await tx.staff.findMany({ select: { id: true } });
+        const deleteIdSet = new Set(uniqueDeleteIds);
+        const matchedDeleteIds = existingStaffRows
+          .filter((row) => deleteIdSet.has(row.id))
+          .map((row) => row.id);
+        if (matchedDeleteIds.length > 0) {
+          if (existingStaffRows.length - matchedDeleteIds.length < 1) {
+            throw new ApiError(400, "At least 1 staff member must remain in the system.");
+          }
+          await tx.staff.deleteMany({
+            where: { id: { in: matchedDeleteIds } },
+          });
+        }
+      }
+
+      if (adminSession && Array.isArray(erp.staffMembers)) {
+        for (let stIdx = 0; stIdx < erp.staffMembers.length; stIdx++) {
+          const st = erp.staffMembers[stIdx];
+          const roleName = String(st.role || "Operations Staff").trim() || "Operations Staff";
+          const emailClean = String(st.email || "").trim().toLowerCase();
+          const prevEmailClean = st.prevEmail ? String(st.prevEmail).trim().toLowerCase() : "";
+          const lookupId = String(st.dbId || st.id || "").trim();
+          const rawCustomId = st.staffId !== undefined && st.staffId !== null ? String(st.staffId).trim() : "";
+          const cleanCustomId = /^stf-|^staff_/i.test(rawCustomId) ? "" : rawCustomId;
+
+          // Deterministic identity lookup: immutable DB id first, then previous/current email, then loginId.
+          // Never match another employee purely by `code` (Staff ID) or a Staff ID collision could overwrite them!
+          let existingSt = lookupId ? await tx.staff.findUnique({ where: { id: lookupId }, include: { role: true } }) : null;
+          if (!existingSt && prevEmailClean) {
+            existingSt = await tx.staff.findFirst({
+              where: { email: { equals: prevEmailClean, mode: "insensitive" } },
+              include: { role: true },
+            });
+          }
+          if (!existingSt && emailClean) {
+            existingSt = await tx.staff.findFirst({
+              where: { email: { equals: emailClean, mode: "insensitive" } },
+              include: { role: true },
+            });
+          }
+          if (!existingSt && st.loginId) {
+            existingSt = await tx.staff.findUnique({ where: { loginId: String(st.loginId).trim() }, include: { role: true } });
+          }
+
+          if (!hasTeamAdmin) {
+            if (!existingSt) {
+              throw new ApiError(403, "Working Team Admin permission required to create staff members.");
+            }
+            const existingCleanCode =
+              existingSt.code && !/^stf-|^staff_/i.test(existingSt.code) ? existingSt.code : "";
+            const existingPermKeys = expandStaffPermissionKeys(existingSt.permissions);
+            const rawIncomingPerms = Array.isArray(st.accesses) && st.accesses.length
+              ? st.accesses
+              : existingSt.permissions;
+            const incomingPermKeys = expandStaffPermissionKeys(rawIncomingPerms);
+            const resolvedStatus = labelToStaffStatus(st.status);
+            const resolvedShift = normalizeStaffShift(st.shift);
+            const resolvedAvatar =
+              typeof st.avatar === "string" && st.avatar.trim()
+                ? st.avatar.trim().slice(0, 2).toUpperCase()
+                : initialsFromName(st.name);
+            const newPlainPass = typeof st.newPassword === "string" ? st.newPassword.trim() : "";
+
+            const privilegedChanged =
+              roleName !== existingSt.role.name ||
+              resolvedStatus !== existingSt.status ||
+              resolvedShift !== normalizeStaffShift(existingSt.shift) ||
+              (emailClean && emailClean !== existingSt.email.toLowerCase()) ||
+              cleanCustomId !== existingCleanCode ||
+              incomingPermKeys.join(",") !== existingPermKeys.join(",");
+
+            const basicChanged =
+              String(st.name || "").trim() !== existingSt.name ||
+              String(st.phone || "") !== (existingSt.phone || "") ||
+              String(st.dept || "Operations") !== (existingSt.dept || "Operations") ||
+              resolvedAvatar !== (existingSt.avatar || initialsFromName(existingSt.name)) ||
+              Boolean(newPlainPass);
+
+            if (existingSt.id !== adminSession.staffId) {
+              if (privilegedChanged || basicChanged) {
+                throw new ApiError(403, "Working Team Admin permission required to modify other staff records.");
+              }
+              continue;
+            }
+
+            if (privilegedChanged) {
+              throw new ApiError(
+                403,
+                "Only Working Team Admin can modify your role, status, email, Staff ID, or permissions.",
+              );
+            }
+
+            if (basicChanged) {
+              const hashedPass = newPlainPass ? await bcrypt.hash(newPlainPass, 10) : undefined;
+              await tx.staff.update({
+                where: { id: existingSt.id },
+                data: {
+                  name: st.name,
+                  phone: st.phone || "",
+                  dept: st.dept || "Operations",
+                  avatar: resolvedAvatar,
+                  ...(hashedPass ? { passwordHash: hashedPass } : {}),
+                },
+              });
+            }
+            continue;
+          }
+
+          const role = await tx.staffRole.upsert({
+            where: { name: roleName },
+            create: {
+              name: roleName,
+              permissions: roleName.toLowerCase().includes("founder") ? ["*"] : ["dashboard"],
+            },
+            update: {},
+          });
+          const perms = Array.isArray(st.accesses) && st.accesses.length
+            ? st.accesses.map((a: string) => LEGACY_ACCESS_LABELS[a] || a)
+            : role.permissions.length
+              ? role.permissions
+              : ["dashboard"];
+
+          if (emailClean) {
+            const emailConflict = await tx.staff.findFirst({
+              where: {
+                email: { equals: emailClean, mode: "insensitive" },
+                ...(existingSt ? { NOT: { id: existingSt.id } } : {}),
+              },
+            });
+            if (emailConflict) {
+              throw new ApiError(409, `Email "${emailClean}" is already assigned to ${emailConflict.name}.`);
+            }
+          }
+
+          let nextCode = cleanCustomId;
+          if (!nextCode) {
+            if (existingSt && /^stf-|^staff_/i.test(existingSt.code)) {
+              nextCode = existingSt.code;
+            } else {
+              nextCode = lookupId && !/^stf-/i.test(lookupId) ? lookupId : `staff_${Date.now()}_${stIdx}`;
+            }
+          }
+
+          const codeConflict = await tx.staff.findFirst({
+            where: {
+              code: { equals: nextCode, mode: "insensitive" },
+              ...(existingSt ? { NOT: { id: existingSt.id } } : {}),
+            },
+          });
+          if (codeConflict) {
+            throw new ApiError(409, `Staff ID "${nextCode}" is already assigned to ${codeConflict.name}.`);
+          }
+
+          const resolvedStatus = labelToStaffStatus(st.status);
+          const resolvedShift = normalizeStaffShift(st.shift);
+          const resolvedAvatar =
+            typeof st.avatar === "string" && st.avatar.trim()
+              ? st.avatar.trim().slice(0, 2).toUpperCase()
+              : initialsFromName(st.name);
+          const newPlainPass = typeof st.newPassword === "string" ? st.newPassword.trim() : "";
+          const hashedPass = newPlainPass ? await bcrypt.hash(newPlainPass, 10) : undefined;
+
+          if (existingSt) {
+            await tx.staff.update({
+              where: { id: existingSt.id },
+              data: {
+                code: nextCode,
+                name: st.name,
+                phone: st.phone || "",
+                email: emailClean || existingSt.email,
+                roleId: role.id,
+                dept: st.dept || "Operations",
+                shift: resolvedShift,
+                status: resolvedStatus,
+                avatar: resolvedAvatar,
+                permissions: perms,
+                ...(hashedPass ? { passwordHash: hashedPass } : {}),
+              },
+            });
+          } else {
+            const createId = lookupId || `staff_${Date.now()}_${stIdx}`;
+            const defaultHash = hashedPass || (await bcrypt.hash("Tehzib@2027", 10));
+            await tx.staff.create({
+              data: {
+                id: createId,
+                code: nextCode,
+                name: st.name,
+                phone: st.phone || "",
+                email: emailClean || `${createId.toLowerCase()}@tehzib.com`,
+                passwordHash: defaultHash,
+                roleId: role.id,
+                dept: st.dept || "Operations",
+                shift: resolvedShift,
+                status: resolvedStatus,
+                avatar: resolvedAvatar,
+                permissions: perms,
+              },
+            });
+          }
+        }
+      }
+
+      // 12. Expenses
       if (Array.isArray(erp.expenses)) {
         const allStaff = await tx.staff.findMany();
-        const staffByCode = new Map(allStaff.map((s) => [s.code, s.id]));
+        const staffLookup = new Map<string, string>();
+        for (const s of allStaff) {
+          staffLookup.set(s.id, s.id);
+          staffLookup.set(s.code, s.id);
+          staffLookup.set(s.code.toLowerCase(), s.id);
+          staffLookup.set(s.name.toLowerCase(), s.id);
+          staffLookup.set(s.email.toLowerCase(), s.id);
+        }
         for (const ex of erp.expenses) {
+          const matchedStaffId =
+            (ex.responsibleStaffId && staffLookup.get(String(ex.responsibleStaffId).trim())) ||
+            (ex.responsibleStaffId && staffLookup.get(String(ex.responsibleStaffId).trim().toLowerCase())) ||
+            (ex.responsibleStaffName && staffLookup.get(String(ex.responsibleStaffName).trim().toLowerCase())) ||
+            null;
           await tx.expense.upsert({
             where: { number: ex.id },
             create: {
@@ -1349,7 +1689,7 @@ async function persistPlatformStateInner(payload: {
               category: ex.category || "Other E-Commerce Opex",
               amount: Math.round(Number(ex.amount) || 0),
               accountId: ex.account || "acc_cash",
-              staffId: staffByCode.get(ex.responsibleStaffId) || null,
+              staffId: matchedStaffId,
             },
             update: {
               title: ex.title,
@@ -1357,12 +1697,13 @@ async function persistPlatformStateInner(payload: {
               category: ex.category || "Other E-Commerce Opex",
               amount: Math.round(Number(ex.amount) || 0),
               accountId: ex.account || "acc_cash",
+              staffId: matchedStaffId,
             },
           });
         }
       }
 
-      // 12. Supplier Payments Log
+      // 13. Supplier Payments Log
       if (Array.isArray(erp.paymentsLog)) {
         for (const pl of erp.paymentsLog) {
           const supExists = await tx.supplier.findUnique({ where: { code: pl.supplierId } });
@@ -1386,75 +1727,11 @@ async function persistPlatformStateInner(payload: {
             },
             update: {
               amount: Math.round(Number(pl.amount) || 0),
+              advanceByStaff: pl.advanceByStaff || "Nadia Sultana",
+              dueByStaff: pl.dueByStaff || "Farhan Islam",
               details: pl.details || "",
             },
           });
-        }
-      }
-
-      // 13. Staff Roles & Members
-      if (Array.isArray(erp.staffRoles)) {
-        for (const rName of erp.staffRoles) {
-          await tx.staffRole.upsert({
-            where: { name: rName },
-            create: {
-              name: rName,
-              permissions: rName.toLowerCase().includes("founder") ? ["*"] : ["dashboard"],
-            },
-            update: {},
-          });
-        }
-      }
-      if (Array.isArray(erp.staffMembers)) {
-        for (const st of erp.staffMembers) {
-          const role = await tx.staffRole.upsert({
-            where: { name: st.role || "Operations Staff" },
-            create: { name: st.role || "Operations Staff", permissions: ["dashboard"] },
-            update: {},
-          });
-          const perms = Array.isArray(st.accesses)
-            ? st.accesses.map((a: string) => LEGACY_ACCESS_LABELS[a] || a)
-            : ["dashboard"];
-          const customCode = st.staffId && String(st.staffId).trim() ? String(st.staffId).trim() : st.id;
-          const existingSt = await tx.staff.findFirst({
-            where: {
-              OR: [
-                { id: st.id },
-                { code: customCode },
-                { email: st.email },
-              ],
-            },
-          });
-          if (existingSt) {
-            await tx.staff.update({
-              where: { id: existingSt.id },
-              data: {
-                code: customCode,
-                name: st.name,
-                phone: st.phone || "",
-                email: st.email,
-                roleId: role.id,
-                dept: st.dept || "Operations",
-                status: st.status === "Active" ? StaffStatus.ACTIVE : StaffStatus.INACTIVE,
-                permissions: perms,
-              },
-            });
-          } else {
-            await tx.staff.create({
-              data: {
-                id: st.id,
-                code: customCode,
-                name: st.name,
-                phone: st.phone || "",
-                email: st.email || `${st.id.toLowerCase()}@tehzib.com`,
-                passwordHash: "$2b$10$seededstaffdefaultpasswordhash",
-                roleId: role.id,
-                dept: st.dept || "Operations",
-                status: st.status === "Active" ? StaffStatus.ACTIVE : StaffStatus.INACTIVE,
-                permissions: perms,
-              },
-            });
-          }
         }
       }
 
