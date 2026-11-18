@@ -35,7 +35,7 @@ declare global {
   }
 }
 
-const RUNTIME_VERSION = "79";
+const RUNTIME_VERSION = "87";
 const STATIC_MARKUP = { __html: PLATFORM_HTML_MARKUP };
 
 /**
@@ -176,6 +176,7 @@ export function TehzibPlatformClient({
           (window as any).__tehzibApplyServerStaffSync(
             json.data.erpDb.staffMembers,
             json.data.erpDb.staffRoles,
+            json.data.erpDb.staffRolesByDept,
           );
         }
       }

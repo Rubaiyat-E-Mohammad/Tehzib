@@ -728,6 +728,7 @@ model Lookup {
 model StaffRole {
   id          String   @id @default(cuid())
   name        String   @unique
+  dept        String?
   permissions String[] // module keys, see src/lib/rbac.ts
   isSystem    Boolean  @default(false)
   staff       Staff[]

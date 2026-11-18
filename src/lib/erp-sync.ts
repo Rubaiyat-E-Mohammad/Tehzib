@@ -78,6 +78,142 @@ function normalizeStaffShift(raw: string | null | undefined): string {
   return isNight ? "Full-Time (Night Shift)" : "Full-Time (Day Shift)";
 }
 
+const STAFF_DEPARTMENT_OPTIONS = [
+  "Human Resources",
+  "Finance & Accounts",
+  "Sales & Marketing",
+  "Engineering & IT",
+  "Operations & Administrations",
+  "Inventory & Supply Chain",
+  "Lead & Customer Management",
+  "Sourcing & Procurement",
+] as const;
+
+const DEPARTMENT_ROLES_MAP: Record<string, string[]> = {
+  "Human Resources": [
+    "Chief Human Resources Officer",
+    "HR Manager",
+    "Talent Acquisition Specialist",
+    "HR Generalist",
+    "HR Executive",
+    "HR Assistant",
+  ],
+  "Finance & Accounts": [
+    "Chief Financial Officer",
+    "Accounting Manager",
+    "Senior Accountant",
+    "Financial Analyst",
+    "Executice Accountant",
+    "Junior Accountant",
+  ],
+  "Sales & Marketing": [
+    "Sales & Marketing Director",
+    "Sales Manager",
+    "Digital Marketing Manager",
+    "Digital Marketing Executive",
+    "Sales Representative",
+    "Marketing Assistant",
+  ],
+  "Engineering & IT": [
+    "Chief Technology Officer (CTO)",
+    "Product Manager",
+    "Software Engineer",
+    "Software QA Engineer",
+    "IT Support Executive",
+    "Project Manager",
+  ],
+  "Operations & Administrations": [
+    "Chief Operating Officer",
+    "Operations Manager",
+    "Office Manager",
+    "Administrative Executive",
+    "Administrative Assistant",
+    "Receptionist",
+  ],
+  "Inventory & Supply Chain": [
+    "Supply Chain Director",
+    "Supply Chain Manager",
+    "Warehouse Manager",
+    "Demand Planner",
+    "Inventory Control Specialist",
+    "Material Handler",
+  ],
+  "Lead & Customer Management": [
+    "Head of Customer Support",
+    "Customer Support Manager",
+    "Customer Support Specialist",
+    "Customer Support Executive",
+    "Customer Support Assistant",
+  ],
+  "Sourcing & Procurement": [
+    "Chief Procurement Officer",
+    "Procurement Manager",
+    "Strategic Sourcing Specialist",
+    "Purchasing Executive",
+    "Purchasing Assistant",
+  ],
+};
+
+function buildStaffRolesByDept(dbRoles: Array<{ name: string; dept?: string | null }>): Record<string, string[]> {
+  const result: Record<string, string[]> = {};
+  for (const dept of STAFF_DEPARTMENT_OPTIONS) {
+    result[dept] = [...(DEPARTMENT_ROLES_MAP[dept] || [])];
+  }
+  for (const r of dbRoles) {
+    if (!r.dept || !r.name) continue;
+    const normDept = normalizeStaffDept(r.dept);
+    const list = result[normDept] || (result[normDept] = []);
+    if (!list.some((x) => x.toLowerCase() === r.name.toLowerCase())) {
+      list.push(r.name);
+    }
+  }
+  return result;
+}
+
+function normalizeStaffDept(raw: string | null | undefined): string {
+  const clean = String(raw || "").trim();
+  if (!clean) return "Operations & Administrations";
+  const exact = STAFF_DEPARTMENT_OPTIONS.find((opt) => opt.toLowerCase() === clean.toLowerCase());
+  if (exact) return exact;
+  const lower = clean.toLowerCase();
+  if (lower.includes("human") || lower === "hr") return "Human Resources";
+  if (lower.includes("finance") || lower.includes("account")) return "Finance & Accounts";
+  if (
+    lower.includes("sales") ||
+    lower.includes("market") ||
+    lower.includes("brand") ||
+    lower.includes("cms") ||
+    lower.includes("promo")
+  ) {
+    return "Sales & Marketing";
+  }
+  if (lower.includes("engineer") || lower.includes("it") || lower.includes("tech")) {
+    return "Engineering & IT";
+  }
+  if (
+    lower.includes("inventory") ||
+    lower.includes("warehouse") ||
+    lower.includes("supply") ||
+    lower.includes("dispatch") ||
+    lower.includes("logistic") ||
+    lower.includes("courier")
+  ) {
+    return "Inventory & Supply Chain";
+  }
+  if (lower.includes("lead") || lower.includes("customer") || lower.includes("crm")) {
+    return "Lead & Customer Management";
+  }
+  if (
+    lower.includes("sourc") ||
+    lower.includes("procure") ||
+    lower.includes("supplier") ||
+    lower.includes("import")
+  ) {
+    return "Sourcing & Procurement";
+  }
+  return "Operations & Administrations";
+}
+
 function initialsFromName(name: string | null | undefined, fallback = "ST"): string {
   const parts = String(name || "")
     .trim()
@@ -541,7 +677,7 @@ export async function buildHydratedPlatformState() {
       phone: st.phone || "",
       email: st.email,
       role: st.role.name,
-      dept: st.dept || "Operations",
+      dept: normalizeStaffDept(st.dept),
       shift: normalizeStaffShift(st.shift),
       avatar: st.avatar || initialsFromName(st.name),
       status: staffStatusToLabel(st.status),
@@ -655,6 +791,7 @@ export async function buildHydratedPlatformState() {
       .filter((l) => l.kind === LookupKind.PAYMENT_TERM)
       .map((l) => l.value),
     staffRoles: staffRoles.map((r) => r.name),
+    staffRolesByDept: buildStaffRolesByDept(staffRoles),
     staffMembers: erpStaffMembers,
     expenses: erpExpenses,
     paymentsLog: erpPaymentsLog,
@@ -1420,7 +1557,25 @@ async function persistPlatformStateInner(
       // 11. Staff Roles & Members (sync before Expenses & Payments so new/renamed staff FKs resolve)
       const hasTeamAdmin = Boolean(adminSession && hasPermission(adminSession.permissions, "team"));
 
-      if (hasTeamAdmin && Array.isArray(erp.staffRoles)) {
+      if (hasTeamAdmin && erp.staffRolesByDept && typeof erp.staffRolesByDept === "object") {
+        for (const [rawDept, roles] of Object.entries(erp.staffRolesByDept)) {
+          if (!Array.isArray(roles)) continue;
+          const normDept = normalizeStaffDept(rawDept);
+          for (const rawRoleName of roles) {
+            const rName = String(rawRoleName || "").trim();
+            if (!rName || rName === "__ADD_NEW__") continue;
+            await tx.staffRole.upsert({
+              where: { name: rName },
+              create: {
+                name: rName,
+                dept: normDept,
+                permissions: rName.toLowerCase().includes("founder") || rName === "Chief Operating Officer" ? ["*"] : ["dashboard"],
+              },
+              update: { dept: normDept },
+            });
+          }
+        }
+      } else if (hasTeamAdmin && Array.isArray(erp.staffRoles)) {
         for (const rawRoleName of erp.staffRoles) {
           const rName = String(rawRoleName || "").trim();
           if (!rName) continue;
@@ -1531,10 +1686,11 @@ async function persistPlatformStateInner(
               cleanCustomId !== existingCleanCode ||
               incomingPermKeys.join(",") !== existingPermKeys.join(",");
 
+            const resolvedDept = normalizeStaffDept(st.dept);
             const basicChanged =
               String(st.name || "").trim() !== existingSt.name ||
               String(st.phone || "") !== (existingSt.phone || "") ||
-              String(st.dept || "Operations") !== (existingSt.dept || "Operations") ||
+              resolvedDept !== normalizeStaffDept(existingSt.dept) ||
               resolvedAvatar !== (existingSt.avatar || initialsFromName(existingSt.name)) ||
               Boolean(newPlainPass);
 
@@ -1559,7 +1715,7 @@ async function persistPlatformStateInner(
                 data: {
                   name: st.name,
                   phone: st.phone || "",
-                  dept: st.dept || "Operations",
+                  dept: resolvedDept,
                   avatar: resolvedAvatar,
                   ...(hashedPass ? { passwordHash: hashedPass } : {}),
                 },
@@ -1568,13 +1724,15 @@ async function persistPlatformStateInner(
             continue;
           }
 
+          const targetDept = normalizeStaffDept(st.dept);
           const role = await tx.staffRole.upsert({
             where: { name: roleName },
             create: {
               name: roleName,
-              permissions: roleName.toLowerCase().includes("founder") ? ["*"] : ["dashboard"],
+              dept: targetDept,
+              permissions: roleName.toLowerCase().includes("founder") || roleName === "Chief Operating Officer" ? ["*"] : ["dashboard"],
             },
-            update: {},
+            update: { dept: targetDept },
           });
           const perms = Array.isArray(st.accesses) && st.accesses.length
             ? st.accesses.map((a: string) => LEGACY_ACCESS_LABELS[a] || a)
@@ -1615,6 +1773,7 @@ async function persistPlatformStateInner(
 
           const resolvedStatus = labelToStaffStatus(st.status);
           const resolvedShift = normalizeStaffShift(st.shift);
+          const resolvedDept = normalizeStaffDept(st.dept);
           const resolvedAvatar =
             typeof st.avatar === "string" && st.avatar.trim()
               ? st.avatar.trim().slice(0, 2).toUpperCase()
@@ -1631,7 +1790,7 @@ async function persistPlatformStateInner(
                 phone: st.phone || "",
                 email: emailClean || existingSt.email,
                 roleId: role.id,
-                dept: st.dept || "Operations",
+                dept: resolvedDept,
                 shift: resolvedShift,
                 status: resolvedStatus,
                 avatar: resolvedAvatar,
@@ -1651,7 +1810,7 @@ async function persistPlatformStateInner(
                 email: emailClean || `${createId.toLowerCase()}@tehzib.com`,
                 passwordHash: defaultHash,
                 roleId: role.id,
-                dept: st.dept || "Operations",
+                dept: resolvedDept,
                 shift: resolvedShift,
                 status: resolvedStatus,
                 avatar: resolvedAvatar,
